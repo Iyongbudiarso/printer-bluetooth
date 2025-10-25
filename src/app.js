@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dialog = document.querySelector('#dialog');
   const dialogMessage = document.querySelector('#dialogMessage');
   const previewDialog = document.querySelector('#previewDialog');
-  const pdfInput = document.querySelector('#pdfInput');
+  const fileInput = document.querySelector('#fileInput');
   const printWidthSelect = document.querySelector('#printWidth');
   const setupButton = document.querySelector('#setupPrinter');
   const previewButton = document.querySelector('#previewButton');
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const DITHER_THRESHOLD = 128;
   const WHITE_THRESHOLD = 250;
   const DEFAULT_FEED_LINES = 2;
-  const DEFAULT_FEED_DOTS = 100;
+  const DEFAULT_FEED_DOTS = 50;
 
   let imageDataForPrint = null;
   let printCharacteristic = null;
@@ -104,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let transferIndex = 0;
   let sourceCanvasForPrint = null;
   let lastPdfBytes = null;
+  let lastImageDataUrl = null;
   let canWriteWithoutResponse = false;
 
   hideProgress();
@@ -719,37 +720,67 @@ document.addEventListener('DOMContentLoaded', () => {
         hideProgress();
       })
       .catch(handleError);
+    } else if (lastImageDataUrl) {
+      showProgress();
+      renderImageFromDataUrl(lastImageDataUrl)
+      .then(() => {
+        hideProgress();
+      })
+      .catch(handleError);
     } else if (sourceCanvasForPrint) {
       copyCanvasToPreview(sourceCanvasForPrint);
     }
   });
 
-  pdfInput.addEventListener('change', event => {
+  fileInput.addEventListener('change', event => {
     const file = event.target.files[0];
     if (!file) {
       return;
     }
-    if (file.type !== 'application/pdf') {
-      showError('Please select a PDF file.');
-      event.target.value = '';
+    const { type } = file;
+    if (type === 'application/pdf') {
+      showProgress();
+      const reader = new FileReader();
+      reader.onload = loadEvent => {
+        const arrayBuffer = loadEvent.target.result;
+        const bytes = new Uint8Array(arrayBuffer);
+        renderPdfData(bytes)
+        .then(() => {
+          hideProgress();
+          lastPdfBytes = bytes;
+          lastImageDataUrl = null;
+          event.target.value = '';
+        })
+        .catch(handleError);
+      };
+      reader.onerror = () => {
+        handleError(new Error('Failed to read the selected PDF file.'));
+      };
+      reader.readAsArrayBuffer(file);
       return;
     }
-    showProgress();
-    const reader = new FileReader();
-    reader.onload = loadEvent => {
-      const arrayBuffer = loadEvent.target.result;
-      const bytes = new Uint8Array(arrayBuffer);
-      renderPdfData(bytes)
-      .then(() => {
-        hideProgress();
-        event.target.value = '';
-      })
-      .catch(handleError);
-    };
-    reader.onerror = () => {
-      handleError(new Error('Failed to read the selected PDF file.'));
-    };
-    reader.readAsArrayBuffer(file);
+    if (type === 'image/png' || type === 'image/jpeg') {
+      showProgress();
+      const reader = new FileReader();
+      reader.onload = loadEvent => {
+        const dataUrl = loadEvent.target.result;
+        renderImageFromDataUrl(dataUrl)
+        .then(() => {
+          hideProgress();
+          lastImageDataUrl = dataUrl;
+          lastPdfBytes = null;
+          event.target.value = '';
+        })
+        .catch(handleError);
+      };
+      reader.onerror = () => {
+        handleError(new Error('Failed to read the selected image file.'));
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+    showError('Format file tidak didukung. Pilih PDF, PNG, atau JPG.');
+    event.target.value = '';
   });
 
   function renderPdfData(bytes) {
@@ -757,12 +788,36 @@ document.addEventListener('DOMContentLoaded', () => {
       return Promise.reject(new Error('PDF rendering library not available.'));
     }
     lastPdfBytes = bytes;
+    lastImageDataUrl = null;
     const loadingTask = pdfjsLib.getDocument({ data: bytes });
     return loadingTask.promise
     .then(document => {
       return document.getPage(1);
     })
     .then(page => renderPdfPage(page));
+  }
+
+  function renderImageFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+      if (!dataUrl) {
+        reject(new Error('Image data is empty.'));
+        return;
+      }
+      const image = new Image();
+      image.onload = () => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = image.width;
+        tempCanvas.height = image.height;
+        const tempContext = tempCanvas.getContext('2d');
+        tempContext.drawImage(image, 0, 0);
+        copyCanvasToPreview(tempCanvas);
+        resolve();
+      };
+      image.onerror = () => {
+        reject(new Error('Gagal memuat gambar.'));
+      };
+      image.src = dataUrl;
+    });
   }
 
   function renderPdfPage(page) {

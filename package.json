@@ -2,12 +2,14 @@
   "name": "printer-bluetooth",
   "version": "1.0.0",
   "description": "Available at https://webbluetoothcg.github.io/demos/bluetooth-printer/",
-  "main": "app.js",
+  "main": "src/app.js",
   "scripts": {
     "clean": "rm -rf public && mkdir -p public",
-    "dev": "tailwindcss -i ./src/tailwind.css -o ./tailwind.css --watch",
+    "dev": "concurrently \"npm run dev:css\" \"npm run dev:serve\"",
+    "dev:css": "tailwindcss -i ./src/tailwind.css -o ./tailwind.css --watch",
+    "dev:serve": "live-server --port=8080 --open=src/index.html --watch=src,tailwind.css",
     "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --minify",
-    "copy:assets": "cp index.html public/index.html && cp app.js public/app.js && cp styles.css public/styles.css && cp logo-black.png public/logo-black.png && cp printer.jpg public/printer.jpg",
+    "copy:assets": "cp src/index.html public/index.html && cp src/app.js public/app.js && cp src/styles.css public/styles.css && cp src/logo-black.png public/logo-black.png && cp src/printer.jpg public/printer.jpg",
     "build": "npm run clean && npm run build:css && npm run copy:assets",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -28,6 +30,8 @@
     "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/typography": "^0.5.19",
     "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.1",
+    "live-server": "^1.2.2",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.14"
   }

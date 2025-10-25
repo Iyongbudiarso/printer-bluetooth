@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="tailwind.css">
+    <link rel="stylesheet" href="/tailwind.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.min.js"></script>
     <link rel="stylesheet" href="styles.css">
   </head>
@@ -93,10 +93,10 @@
                     <option value="58">58 mm</option>
                   </select>
                 </label>
-                <label for="pdfInput" class="flex flex-col gap-2 text-sm font-medium text-foreground">
-                  Upload PDF
-                  <input type="file" id="pdfInput" accept="application/pdf" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                  <span class="text-xs font-normal text-muted-foreground">PDF akan dikonversi ke bitmap hitam-putih sebelum dikirim ke printer.</span>
+                <label for="fileInput" class="flex flex-col gap-2 text-sm font-medium text-foreground">
+                  Upload PDF atau Gambar
+                  <input type="file" id="fileInput" accept="application/pdf,image/png,image/jpeg" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <span class="text-xs font-normal text-muted-foreground">Pilih PDF, PNG, atau JPG. File akan dikonversi ke bitmap hitam-putih sebelum dicetak.</span>
                 </label>
               </div>
             </article>
