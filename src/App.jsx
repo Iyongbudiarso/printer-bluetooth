@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
+import { AlertCircle, Bluetooth, CheckCircle2, Loader2, Printer } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -39,12 +60,6 @@ const DEFAULT_FEED_LINES = 2;
 const DEFAULT_FEED_DOTS = 50;
 const BLE_WRITE_DELAY_MS = 10;
 
-const TOAST_TONES = {
-  info: 'toast--info',
-  success: 'toast--success',
-  error: 'toast--error'
-};
-
 function App() {
   const [statusKey, setStatusKey] = useState('disconnected');
   const [deviceName, setDeviceName] = useState('Belum ada perangkat terdeteksi.');
@@ -52,8 +67,6 @@ function App() {
   const [isProgressVisible, setProgressVisible] = useState(false);
   const [isPreviewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [toastState, setToastState] = useState({ message: '', tone: 'info', visible: false, duration: 0 });
-
   const previewCanvasRef = useRef(null);
   const modalPreviewCanvasRef = useRef(null);
   const previewContextRef = useRef(null);
@@ -71,9 +84,26 @@ function App() {
   const lastPdfBytesRef = useRef(null);
   const lastImageDataUrlRef = useRef(null);
   const canWriteWithoutResponseRef = useRef(false);
-  const toastTimeoutRef = useRef(null);
+  const { toast: pushToast, dismiss } = useToast();
+  const lastToastIdRef = useRef(null);
 
   const status = useMemo(() => PRINTER_STATUS[statusKey] || PRINTER_STATUS.disconnected, [statusKey]);
+  const statusAccentClass =
+    statusKey === 'connected'
+      ? 'text-emerald-500'
+      : statusKey === 'connecting'
+        ? 'text-primary'
+        : statusKey === 'error'
+          ? 'text-destructive'
+          : 'text-muted-foreground';
+  const StatusIcon =
+    statusKey === 'connected'
+      ? CheckCircle2
+      : statusKey === 'connecting'
+        ? Loader2
+        : statusKey === 'error'
+          ? AlertCircle
+          : Bluetooth;
 
   const showProgress = useCallback(() => setProgressVisible(true), []);
   const hideProgress = useCallback(() => setProgressVisible(false), []);
@@ -104,13 +134,6 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printWidth]);
-
-  useEffect(() => {
-    if (!toastState.visible && toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-  }, [toastState.visible]);
 
 
   const syncModalPreview = useCallback(() => {
@@ -161,24 +184,31 @@ function App() {
     if (!message) {
       return;
     }
-    setToastState({ message, tone, visible: true, duration });
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
+    if (lastToastIdRef.current) {
+      dismiss(lastToastIdRef.current);
+      lastToastIdRef.current = null;
     }
-    if (duration > 0) {
-      toastTimeoutRef.current = setTimeout(() => {
-        setToastState(prev => ({ ...prev, visible: false }));
-      }, duration);
-    }
-  }, []);
+    const variant = tone === 'error' ? 'destructive' : 'default';
+    const titles = {
+      success: 'Berhasil',
+      error: 'Terjadi Kesalahan'
+    };
+    const nextToast = pushToast({
+      variant,
+      description: message,
+      duration,
+      ...(titles[tone] ? { title: titles[tone] } : {})
+    });
+    lastToastIdRef.current = nextToast.id;
+  }, [dismiss, pushToast]);
 
   const hideToast = useCallback(() => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
+    if (!lastToastIdRef.current) {
+      return;
     }
-    setToastState(prev => ({ ...prev, visible: false }));
-  }, []);
+    dismiss(lastToastIdRef.current);
+    lastToastIdRef.current = null;
+  }, [dismiss]);
 
   const setPrinterStatus = useCallback((key) => {
     const next = PRINTER_STATUS[key] ? key : 'disconnected';
@@ -747,223 +777,180 @@ function App() {
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-muted-foreground">Web Bluetooth</p>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground lg:text-[28px]">Bluetooth Printer</h1>
           </div>
-          <button
+          <Button
             type="button"
             onClick={handleSetupPrinter}
-            className="group relative mt-2 inline-flex items-center gap-2 rounded-full border border-border bg-card/90 px-3.5 py-2 text-sm font-medium text-foreground shadow-sm transition hover:border-primary/60 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:mt-0"
+            variant="outline"
+            className="group relative mt-2 inline-flex items-center gap-2 rounded-full border-border bg-card/90 px-3.5 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:border-primary/60 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:mt-0"
           >
             <span className={`h-2.5 w-2.5 rounded-full shadow-sm ${status.dotClass}`} />
-            <span className="text-sm font-semibold tracking-tight text-foreground">{status.label}</span>
-            <svg className="h-3 w-3 text-muted-foreground transition group-hover:text-primary" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.25 3.75 9.75 7l-3.5 3.25" />
-            </svg>
+            <span className="tracking-tight">{status.label}</span>
+            <StatusIcon className={`h-3 w-3 transition ${statusAccentClass} ${statusKey === 'connecting' ? 'animate-spin' : ''} group-hover:text-primary`} />
             <div className="pointer-events-none absolute right-0 top-full z-10 mt-2 hidden min-w-[220px] rounded-xl border border-border bg-popover/95 px-3.5 py-2.5 text-left text-[0.75rem] text-muted-foreground shadow-xl group-hover:flex">
               <div className="flex flex-col">
                 <span className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Perangkat Aktif</span>
                 <span className="mt-1 text-sm font-medium text-foreground">{deviceName}</span>
               </div>
             </div>
-          </button>
+          </Button>
         </header>
 
-        <main className="app-grid flex flex-col gap-8">
-          <div className="order-1 flex flex-col gap-6 app-grid__sidebar">
-            <article className="rounded-2xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-6 py-4">
-                <h2 className="text-base font-semibold text-foreground">Pengaturan Cetak</h2>
-              </div>
-              <div className="space-y-5 px-6 py-6">
-                <label htmlFor="printWidth" className="flex flex-col gap-2 text-sm font-medium text-foreground">
-                  Paper Width
-                  <select
-                    id="printWidth"
-                    value={printWidth}
-                    onChange={(event) => setPrintWidth(event.target.value)}
-                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    <option value="80">80 mm</option>
-                    <option value="58">58 mm</option>
-                  </select>
-                </label>
-                <label htmlFor="fileInput" className="flex flex-col gap-2 text-sm font-medium text-foreground">
-                  Upload PDF atau Gambar
-                  <input
-                    type="file"
+        <main className="app-grid gap-8">
+          <div className="order-1 app-grid__sidebar flex flex-col gap-6">
+            <Card className="rounded-2xl border-border shadow-sm">
+              <CardHeader className="border-b border-border/60 pb-5">
+                <CardTitle className="text-base font-semibold">Pengaturan Cetak</CardTitle>
+                <CardDescription className="text-sm">
+                  Atur lebar kertas dan unggah file untuk diproses.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="printWidth">Paper Width</Label>
+                  <Select value={printWidth} onValueChange={setPrintWidth}>
+                    <SelectTrigger id="printWidth">
+                      <SelectValue placeholder="Pilih lebar kertas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="80">80 mm</SelectItem>
+                      <SelectItem value="58">58 mm</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fileInput">Upload PDF atau Gambar</Label>
+                  <Input
                     id="fileInput"
+                    type="file"
                     accept="application/pdf,image/png,image/jpeg"
                     onChange={handleFileChange}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="cursor-pointer text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80"
                   />
-                  <span className="text-xs font-normal text-muted-foreground">Pilih PDF, PNG, atau JPG. File akan dikonversi ke bitmap hitam-putih sebelum dicetak.</span>
-                </label>
-              </div>
-            </article>
-            <article className="rounded-2xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-6 py-4">
-                <h2 className="text-base font-semibold text-foreground">Aksi</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Setelah setup selesai, gunakan tombol berikut untuk pratinjau dan mencetak.</p>
-              </div>
-              <div className="grid gap-3 px-6 py-6">
-                <button
-                  type="button"
-                  onClick={showPreviewDialog}
-                  className="inline-flex h-11 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
+                  <p className="text-xs text-muted-foreground">
+                    Pilih PDF, PNG, atau JPG. File akan dikonversi ke bitmap hitam-putih sebelum dicetak.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-border shadow-sm">
+              <CardHeader className="border-b border-border/60 pb-4">
+                <CardTitle className="text-base font-semibold">Aksi</CardTitle>
+                <CardDescription className="text-sm">
+                  Setelah setup selesai, gunakan tombol berikut untuk pratinjau dan mencetak.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 pt-6">
+                <Button variant="outline" className="h-11 justify-center" onClick={showPreviewDialog}>
                   Preview Print
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-primary-foreground shadow-md transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
+                </Button>
+                <Button variant="secondary" className="h-11 justify-center" onClick={handleDownloadPreview}>
+                  Simpan sebagai PNG
+                </Button>
+                <Button className="h-11 justify-center uppercase tracking-[0.12em]" onClick={handlePrint}>
+                  <Printer className="mr-2 h-4 w-4" />
                   Print
-                </button>
-              </div>
-            </article>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
-          <article className="order-2 rounded-2xl border border-border bg-card shadow-sm app-grid__preview relative pb-16">
-            <div className="border-b border-border px-6 py-4">
-              <h2 className="text-lg font-semibold text-foreground">Print Preview</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Pratinjau hasil cetak monokrom yang sudah dihaluskan untuk lebar kertas yang dipilih.</p>
-            </div>
-            <div className="flex min-h-[320px] items-center justify-center px-6 pt-10 pb-14">
+          <Card className="order-2 rounded-2xl border-border shadow-sm app-grid__preview">
+            <CardHeader className="border-b border-border/60 pb-4">
+              <CardTitle className="text-lg font-semibold">Print Preview</CardTitle>
+              <CardDescription className="text-sm">
+                Pratinjau hasil cetak monokrom yang disesuaikan dengan lebar kertas yang dipilih.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-6 px-6 py-10">
               <canvas
                 ref={previewCanvasRef}
                 width="240"
                 height="240"
                 className="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"
               />
-            </div>
-            <div className="border-t border-border bg-muted/50 px-6 py-3 text-xs text-muted-foreground absolute bottom-0 left-0 right-0 rounded-b-2xl">
-              Klik “Preview Print” untuk memuat ulang tampilan setelah mengunggah PDF.
-            </div>
-          </article>
+              <p className="text-xs text-muted-foreground">
+                Klik “Preview Print” setelah mengunggah file untuk memuat ulang tampilan.
+              </p>
+            </CardContent>
+          </Card>
 
-          <article className="order-4 rounded-2xl border border-border bg-card shadow-sm app-grid__info">
-            <div className="border-b border-border px-6 py-4">
-              <h2 className="text-lg font-semibold text-foreground">Informasi Printer</h2>
-            </div>
-            <dl className="grid gap-4 px-6 py-6 text-sm text-muted-foreground lg:grid-cols-2">
+          <Card className="order-4 rounded-2xl border-border shadow-sm app-grid__info">
+            <CardHeader className="border-b border-border/60 pb-4">
+              <CardTitle className="text-lg font-semibold">Informasi Printer</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 px-6 py-6 text-sm text-muted-foreground lg:grid-cols-2">
               <div>
-                <dt className="font-medium text-foreground">Konektivitas</dt>
-                <dd>Bluetooth Low Energy (ESC/POS).</dd>
+                <p className="font-medium text-foreground">Konektivitas</p>
+                <p>Bluetooth Low Energy (ESC/POS).</p>
               </div>
               <div>
-                <dt className="font-medium text-foreground">Format</dt>
-                <dd>Kanvas hitam-putih dengan dithering Floyd-Steinberg.</dd>
+                <p className="font-medium text-foreground">Format</p>
+                <p>Kanvas hitam-putih dengan dithering Floyd-Steinberg.</p>
               </div>
               <div>
-                <dt className="font-medium text-foreground">Ukuran Maksimal</dt>
-                <dd>576px (80 mm) atau 384px (58 mm).</dd>
+                <p className="font-medium text-foreground">Ukuran Maksimal</p>
+                <p>576px (80 mm) atau 384px (58 mm).</p>
               </div>
               <div>
-                <dt className="font-medium text-foreground">Browser</dt>
-                <dd>Pastikan Web Bluetooth tersedia (Chrome/Edge).</dd>
+                <p className="font-medium text-foreground">Browser</p>
+                <p>Pastikan Web Bluetooth tersedia (Chrome/Edge).</p>
               </div>
-            </dl>
-          </article>
+            </CardContent>
+          </Card>
         </main>
 
         {isProgressVisible && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card px-6 py-5 shadow-xl">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted-foreground/30 border-t-primary" />
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
               <p className="text-sm font-medium text-muted-foreground">Memproses data…</p>
             </div>
           </div>
         )}
 
-        <div
-          className={`toast ${toastState.visible ? 'toast--visible' : ''} ${TOAST_TONES[toastState.tone] ?? ''}`}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          onClick={hideToast}
-        >
-          {toastState.message}
-        </div>
+        <Dialog open={Boolean(errorMessage)} onOpenChange={(open) => !open && closeErrorDialog()}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Terjadi Kesalahan</DialogTitle>
+              <DialogDescription>{errorMessage}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={closeErrorDialog}>Mengerti</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-        {errorMessage && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-            <div className="dialog-panel w-full max-w-md">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">Terjadi Kesalahan</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">{errorMessage}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeErrorDialog}
-                  className="ml-6 inline-flex h-9 w-9 items-center justify-center rounded-full border border-input text-muted-foreground transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <span className="sr-only">Tutup</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeErrorDialog}
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  Mengerti
-                </button>
-              </div>
+        <Dialog open={isPreviewDialogOpen} onOpenChange={(open) => { if (!open) { closePreviewDialog(); } }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Print Preview</DialogTitle>
+              <DialogDescription>Gambar berikut sudah siap dikirim ke printer.</DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/50 p-6">
+              <canvas
+                ref={modalPreviewCanvasRef}
+                width="240"
+                height="240"
+                className="aspect-square w-full max-w-sm rounded-lg border border-border bg-background shadow-inner"
+              />
             </div>
-          </div>
-        )}
-
-        {isPreviewDialogOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-            <div className="dialog-panel w-full max-w-2xl">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">Print Preview</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">Gambar berikut sudah siap dikirim ke printer.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closePreviewDialog}
-                  className="ml-6 inline-flex h-9 w-9 items-center justify-center rounded-full border border-input text-muted-foreground transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <span className="sr-only">Tutup</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div className="mt-6 flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/50 p-6">
-                <canvas
-                  ref={modalPreviewCanvasRef}
-                  width="240"
-                  height="240"
-                  className="aspect-square w-full max-w-sm rounded-lg border border-border bg-background shadow-inner"
-                />
-              </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadPreview}
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  Simpan sebagai PNG
-                </button>
-                <button
-                  type="button"
-                  onClick={closePreviewDialog}
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <Button variant="ghost" onClick={handleDownloadPreview}>
+                Simpan sebagai PNG
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={closePreviewDialog}>
                   Tutup
-                </button>
+                </Button>
+                <Button onClick={handlePrint}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print
+                </Button>
               </div>
-            </div>
-          </div>
-        )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
