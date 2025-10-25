@@ -91,11 +91,12 @@ document.addEventListener('DOMContentLoaded', () => {
     '80': 576
   };
   let maxPrintWidth = WIDTH_TO_PIXELS[printWidthSelect.value] || 384;
-  const BATCH_SIZE = 512;
+  const BATCH_SIZE = 256;
   const DITHER_THRESHOLD = 128;
   const WHITE_THRESHOLD = 250;
   const DEFAULT_FEED_LINES = 2;
   const DEFAULT_FEED_DOTS = 50;
+  const BLE_WRITE_DELAY_MS = 10;
 
   let imageDataForPrint = null;
   let printCharacteristic = null;
@@ -108,6 +109,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let canWriteWithoutResponse = false;
 
   hideProgress();
+
+  function delay(ms) {
+    return new Promise(resolve => {
+      window.setTimeout(resolve, ms);
+    });
+  }
 
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.worker.min.js';
@@ -633,7 +640,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!printCharacteristic) {
       return Promise.reject(new Error('Printer characteristic not available.'));
     }
-    if (canWriteWithoutResponse) {
+    const performWrite = () => {
+      if (!canWriteWithoutResponse) {
+        return printCharacteristic.writeValue(chunk);
+      }
       try {
         const maybePromise = printCharacteristic.writeValueWithoutResponse(chunk);
         if (maybePromise && typeof maybePromise.then === 'function') {
@@ -647,8 +657,14 @@ document.addEventListener('DOMContentLoaded', () => {
         canWriteWithoutResponse = false;
         return printCharacteristic.writeValue(chunk);
       }
-    }
-    return printCharacteristic.writeValue(chunk);
+    };
+    return performWrite()
+    .then(() => {
+      if (BLE_WRITE_DELAY_MS <= 0) {
+        return;
+      }
+      return delay(BLE_WRITE_DELAY_MS);
+    });
   }
 
   setupButton.addEventListener('click', event => {
