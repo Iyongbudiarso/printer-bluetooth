@@ -4,8 +4,11 @@
   "description": "Available at https://webbluetoothcg.github.io/demos/bluetooth-printer/",
   "main": "app.js",
   "scripts": {
-    "build:css": "tailwindcss -i ./src/tailwind.css -o ./tailwind.css --minify",
-    "dev:css": "tailwindcss -i ./src/tailwind.css -o ./tailwind.css --watch",
+    "clean": "rm -rf public && mkdir -p public",
+    "dev": "tailwindcss -i ./src/tailwind.css -o ./tailwind.css --watch",
+    "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --minify",
+    "copy:assets": "cp index.html public/index.html && cp app.js public/app.js && cp styles.css public/styles.css && cp logo-black.png public/logo-black.png && cp printer.jpg public/printer.jpg",
+    "build": "npm run clean && npm run build:css && npm run copy:assets",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
