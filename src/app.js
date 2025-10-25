@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dialogMessage = document.querySelector('#dialogMessage');
   const previewDialog = document.querySelector('#previewDialog');
   const fileInput = document.querySelector('#fileInput');
+  const toast = document.querySelector('#toast');
   const printWidthSelect = document.querySelector('#printWidth');
   const setupButton = document.querySelector('#setupPrinter');
   const previewButton = document.querySelector('#previewButton');
@@ -96,6 +97,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const WHITE_THRESHOLD = 250;
   const DEFAULT_FEED_LINES = 2;
   const DEFAULT_FEED_DOTS = 50;
+  const TOAST_TONE_CLASSES = {
+    info: 'toast--info',
+    success: 'toast--success',
+    error: 'toast--error'
+  };
+  let toastHideTimeout = null;
   const BLE_WRITE_DELAY_MS = 10;
 
   let imageDataForPrint = null;
@@ -109,6 +116,38 @@ document.addEventListener('DOMContentLoaded', () => {
   let canWriteWithoutResponse = false;
 
   hideProgress();
+
+  function hideToast() {
+    if (!toast) {
+      return;
+    }
+    if (toastHideTimeout) {
+      window.clearTimeout(toastHideTimeout);
+      toastHideTimeout = null;
+    }
+    toast.textContent = '';
+    toast.classList.remove('toast--visible');
+    toast.classList.remove(...Object.values(TOAST_TONE_CLASSES));
+  }
+
+  function showToast(messageText, tone = 'info', duration = 4000) {
+    if (!toast || !messageText) {
+      return;
+    }
+    const toneClass = TOAST_TONE_CLASSES[tone] || TOAST_TONE_CLASSES.info;
+    toast.textContent = messageText;
+    toast.classList.remove(...Object.values(TOAST_TONE_CLASSES));
+    toast.classList.add(toneClass);
+    toast.classList.add('toast--visible');
+    if (toastHideTimeout) {
+      window.clearTimeout(toastHideTimeout);
+    }
+    if (duration > 0) {
+      toastHideTimeout = window.setTimeout(() => {
+        hideToast();
+      }, duration);
+    }
+  }
 
   function delay(ms) {
     return new Promise(resolve => {
@@ -751,9 +790,12 @@ document.addEventListener('DOMContentLoaded', () => {
   fileInput.addEventListener('change', event => {
     const file = event.target.files[0];
     if (!file) {
+      hideToast();
       return;
     }
+    const fileName = file.name || 'File';
     const { type } = file;
+    showToast(`Memuat ${fileName}…`, 'info');
     if (type === 'application/pdf') {
       showProgress();
       const reader = new FileReader();
@@ -765,11 +807,16 @@ document.addEventListener('DOMContentLoaded', () => {
           hideProgress();
           lastPdfBytes = bytes;
           lastImageDataUrl = null;
+          showToast(`${fileName} siap dipratinjau.`, 'success');
           event.target.value = '';
         })
-        .catch(handleError);
+        .catch(error => {
+          showToast(`Gagal memuat ${fileName}.`, 'error', 5000);
+          handleError(error);
+        });
       };
       reader.onerror = () => {
+        showToast(`Gagal membaca ${fileName}.`, 'error', 5000);
         handleError(new Error('Failed to read the selected PDF file.'));
       };
       reader.readAsArrayBuffer(file);
@@ -785,16 +832,22 @@ document.addEventListener('DOMContentLoaded', () => {
           hideProgress();
           lastImageDataUrl = dataUrl;
           lastPdfBytes = null;
+          showToast(`${fileName} siap dipratinjau.`, 'success');
           event.target.value = '';
         })
-        .catch(handleError);
+        .catch(error => {
+          showToast(`Gagal memuat ${fileName}.`, 'error', 5000);
+          handleError(error);
+        });
       };
       reader.onerror = () => {
+        showToast(`Gagal membaca ${fileName}.`, 'error', 5000);
         handleError(new Error('Failed to read the selected image file.'));
       };
       reader.readAsDataURL(file);
       return;
     }
+    showToast('Format file tidak didukung. Pilih PDF, PNG, atau JPG.', 'error', 5000);
     showError('Format file tidak didukung. Pilih PDF, PNG, atau JPG.');
     event.target.value = '';
   });

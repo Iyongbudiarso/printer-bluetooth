@@ -87,6 +87,76 @@ body {
   width: 100%;
 }
 
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 12px);
+  min-width: 240px;
+  max-width: min(90vw, 420px);
+  padding: 0.85rem 1.1rem;
+  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  font-size: 0.85rem;
+  line-height: 1.35;
+  box-shadow: 0 20px 38px -18px rgba(15, 23, 42, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 60;
+}
+
+.toast--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.toast--info {
+  background: hsl(var(--primary) / 0.12);
+  border-color: hsl(var(--primary) / 0.4);
+  color: hsl(var(--primary));
+}
+
+.toast--success {
+  background: hsl(145 84% 94%);
+  border-color: hsl(145 60% 70%);
+  color: hsl(145 72% 24%);
+}
+
+.toast--error {
+  background: hsl(var(--destructive) / 0.12);
+  border-color: hsl(var(--destructive) / 0.4);
+  color: hsl(var(--destructive));
+}
+
+@media (min-width: 1024px) {
+  .app-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    grid-template-areas:
+      "preview sidebar"
+      "preview sidebar"
+      "info info";
+    column-gap: 2rem;
+    row-gap: 2rem;
+    }
+  .app-grid__preview {
+    grid-area: preview;
+  }
+  .app-grid__sidebar {
+    grid-area: sidebar;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    align-self: start;
+  }
+  .app-grid__info {
+    grid-area: info;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

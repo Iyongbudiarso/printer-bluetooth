@@ -40,47 +40,8 @@
           </button>
         </header>
 
-        <main class="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
-          <section class="flex flex-col gap-6">
-            <article class="rounded-2xl border border-border bg-card shadow-sm">
-              <div class="border-b border-border px-6 py-4">
-                <h2 class="text-lg font-semibold text-foreground">Print Preview</h2>
-                <p class="mt-1 text-sm text-muted-foreground">Pratinjau hasil cetak monokrom yang sudah dihaluskan untuk lebar kertas yang dipilih.</p>
-              </div>
-              <div class="flex items-center justify-center px-6 py-10">
-                <canvas id="previewCanvas" width="240" height="240" class="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"></canvas>
-              </div>
-              <div class="border-t border-border bg-muted/50 px-6 py-3 text-xs text-muted-foreground">
-                Klik “Preview Print” untuk memuat ulang tampilan setelah mengunggah PDF.
-              </div>
-            </article>
-
-            <article class="rounded-2xl border border-border bg-card shadow-sm">
-              <div class="border-b border-border px-6 py-4">
-                <h2 class="text-lg font-semibold text-foreground">Informasi Printer</h2>
-              </div>
-              <dl class="grid gap-4 px-6 py-6 text-sm text-muted-foreground lg:grid-cols-2">
-                <div>
-                  <dt class="font-medium text-foreground">Konektivitas</dt>
-                  <dd>Bluetooth Low Energy (ESC/POS).</dd>
-                </div>
-                <div>
-                  <dt class="font-medium text-foreground">Format</dt>
-                  <dd>Kanvas hitam-putih dengan dithering Floyd-Steinberg.</dd>
-                </div>
-                <div>
-                  <dt class="font-medium text-foreground">Ukuran Maksimal</dt>
-                  <dd>576px (80 mm) atau 384px (58 mm).</dd>
-                </div>
-                <div>
-                  <dt class="font-medium text-foreground">Browser</dt>
-                  <dd>Pastikan Web Bluetooth tersedia (Chrome/Edge).</dd>
-                </div>
-              </dl>
-            </article>
-          </section>
-
-          <aside class="flex flex-col gap-6">
+        <main class="app-grid flex flex-col gap-8">
+          <div class="order-1 flex flex-col gap-6 app-grid__sidebar">
             <article class="rounded-2xl border border-border bg-card shadow-sm">
               <div class="border-b border-border px-6 py-4">
                 <h2 class="text-base font-semibold text-foreground">Pengaturan Cetak</h2>
@@ -94,13 +55,12 @@
                   </select>
                 </label>
                 <label for="fileInput" class="flex flex-col gap-2 text-sm font-medium text-foreground">
-                  Upload PDF atau Gambar
-                  <input type="file" id="fileInput" accept="application/pdf,image/png,image/jpeg" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                  <span class="text-xs font-normal text-muted-foreground">Pilih PDF, PNG, atau JPG. File akan dikonversi ke bitmap hitam-putih sebelum dicetak.</span>
-                </label>
-              </div>
-            </article>
-
+                Upload PDF atau Gambar
+                <input type="file" id="fileInput" accept="application/pdf,image/png,image/jpeg" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                <span class="text-xs font-normal text-muted-foreground">Pilih PDF, PNG, atau JPG. File akan dikonversi ke bitmap hitam-putih sebelum dicetak.</span>
+              </label>
+            </div>
+          </article>
             <article class="rounded-2xl border border-border bg-card shadow-sm">
               <div class="border-b border-border px-6 py-4">
                 <h2 class="text-base font-semibold text-foreground">Aksi</h2>
@@ -111,8 +71,47 @@
                 <button id="print" class="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-primary-foreground shadow-md transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Print</button>
               </div>
             </article>
-          </aside>
+          </div>
+
+          <article class="order-2 rounded-2xl border border-border bg-card shadow-sm app-grid__preview relative pb-16">
+            <div class="border-b border-border px-6 py-4">
+              <h2 class="text-lg font-semibold text-foreground">Print Preview</h2>
+              <p class="mt-1 text-sm text-muted-foreground">Pratinjau hasil cetak monokrom yang sudah dihaluskan untuk lebar kertas yang dipilih.</p>
+            </div>
+            <div class="flex min-h-[320px] items-center justify-center px-6 pt-10 pb-14">
+              <canvas id="previewCanvas" width="240" height="240" class="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"></canvas>
+            </div>
+            <div class="border-t border-border bg-muted/50 px-6 py-3 text-xs text-muted-foreground absolute bottom-0 left-0 right-0 rounded-b-2xl">
+              Klik “Preview Print” untuk memuat ulang tampilan setelah mengunggah PDF.
+            </div>
+          </article>
+
+
+          <article class="order-4 rounded-2xl border border-border bg-card shadow-sm app-grid__info">
+            <div class="border-b border-border px-6 py-4">
+              <h2 class="text-lg font-semibold text-foreground">Informasi Printer</h2>
+            </div>
+            <dl class="grid gap-4 px-6 py-6 text-sm text-muted-foreground lg:grid-cols-2">
+              <div>
+                <dt class="font-medium text-foreground">Konektivitas</dt>
+                <dd>Bluetooth Low Energy (ESC/POS).</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-foreground">Format</dt>
+                <dd>Kanvas hitam-putih dengan dithering Floyd-Steinberg.</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-foreground">Ukuran Maksimal</dt>
+                <dd>576px (80 mm) atau 384px (58 mm).</dd>
+              </div>
+              <div>
+                <dt class="font-medium text-foreground">Browser</dt>
+                <dd>Pastikan Web Bluetooth tersedia (Chrome/Edge).</dd>
+              </div>
+            </dl>
+          </article>
         </main>
+        <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
       </div>
     </div>
 
