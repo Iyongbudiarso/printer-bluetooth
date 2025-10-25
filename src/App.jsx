@@ -75,6 +75,9 @@ function App() {
 
   const status = useMemo(() => PRINTER_STATUS[statusKey] || PRINTER_STATUS.disconnected, [statusKey]);
 
+  const showProgress = useCallback(() => setProgressVisible(true), []);
+  const hideProgress = useCallback(() => setProgressVisible(false), []);
+
   useEffect(() => {
     if (previewCanvasRef.current && !previewContextRef.current) {
       previewContextRef.current = previewCanvasRef.current.getContext('2d');
@@ -88,7 +91,7 @@ function App() {
       printDataContextRef.current = canvas.getContext('2d');
     }
     hideProgress();
-  }, []);
+  }, [hideProgress, isPreviewDialogOpen]);
 
   useEffect(() => {
     maxPrintWidthRef.current = WIDTH_TO_PIXELS[printWidth] || 384;
@@ -112,18 +115,31 @@ function App() {
 
   const syncModalPreview = useCallback(() => {
     const modalCanvas = modalPreviewCanvasRef.current;
-    const modalContext = modalPreviewContextRef.current;
+    if (!modalCanvas) {
+      return;
+    }
+    let modalContext = modalPreviewContextRef.current;
+    if (!modalContext || modalContext.canvas !== modalCanvas) {
+      modalContext = modalCanvas.getContext('2d');
+      modalPreviewContextRef.current = modalContext;
+    }
     const previewCanvas = previewCanvasRef.current;
     const imageDataForPrint = imageDataForPrintRef.current;
+    const sourceCanvas = sourceCanvasForPrintRef.current;
 
-    if (!modalCanvas || !modalContext) {
+    if (!modalContext) {
       return;
     }
     if (imageDataForPrint) {
       modalCanvas.width = imageDataForPrint.width;
       modalCanvas.height = imageDataForPrint.height;
       modalContext.putImageData(imageDataForPrint, 0, 0);
-    } else if (previewCanvas) {
+    } else if (sourceCanvas && sourceCanvas.width && sourceCanvas.height) {
+      modalCanvas.width = sourceCanvas.width;
+      modalCanvas.height = sourceCanvas.height;
+      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
+      modalContext.drawImage(sourceCanvas, 0, 0);
+    } else if (previewCanvas && previewCanvas.width && previewCanvas.height) {
       modalCanvas.width = previewCanvas.width;
       modalCanvas.height = previewCanvas.height;
       modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
@@ -135,11 +151,11 @@ function App() {
     if (!isPreviewDialogOpen) {
       return;
     }
-    syncModalPreview();
-  }, [isPreviewDialogOpen]);
-
-  const showProgress = useCallback(() => setProgressVisible(true), []);
-  const hideProgress = useCallback(() => setProgressVisible(false), []);
+    const raf = requestAnimationFrame(() => {
+      syncModalPreview();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isPreviewDialogOpen, syncModalPreview]);
 
   const showToast = useCallback((message, tone = 'info', duration = 4000) => {
     if (!message) {
@@ -318,11 +334,25 @@ function App() {
 
     preparePrintData(cloned);
     const previewCanvas = previewCanvasRef.current;
-    const previewContext = previewContextRef.current;
-    const imageDataForPrint = imageDataForPrintRef.current;
-
-    if (!previewCanvas || !previewContext) {
+    if (!previewCanvas) {
       return;
+    }
+    let previewContext = previewContextRef.current;
+    if (!previewContext || previewContext.canvas !== previewCanvas) {
+      previewContext = previewCanvas.getContext('2d');
+      previewContextRef.current = previewContext;
+    }
+    const imageDataForPrint = imageDataForPrintRef.current;
+    if (!previewContext) {
+      return;
+    }
+    const modalCanvas = modalPreviewCanvasRef.current;
+    if (modalCanvas) {
+      let modalContext = modalPreviewContextRef.current;
+      if (!modalContext || modalContext.canvas !== modalCanvas) {
+        modalContext = modalCanvas.getContext('2d');
+        modalPreviewContextRef.current = modalContext;
+      }
     }
 
     if (imageDataForPrint) {
