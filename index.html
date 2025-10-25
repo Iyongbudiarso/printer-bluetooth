@@ -1,20 +1,5 @@
 <!doctype html>
-<!--
-Copyright 2015 Google Inc. All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
--->
-<html>
+<html lang="en">
   <head>
     <title>Bluetooth Printer</title>
     <meta name="description" content="Print text and images to a Bluetooth Printer with a Web Bluetooth app.">
@@ -25,77 +10,161 @@ limitations under the License.
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
 
-
-    <script src="bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="tailwind.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.min.js"></script>
-
-    <!-- Polymer components -->
-    <link rel="import" href="bower_components/paper-progress/paper-progress.html">
-    <link rel="import" href="bower_components/paper-button/paper-button.html">
-    <link rel="import" href="bower_components/paper-card/paper-card.html">
-    <link rel="import" href="bower_components/paper-dialog/paper-dialog.html">
-
-    <link rel="import" href="bower_components/paper-styles/color.html">
-    <link rel="stylesheet" href="bower_components/paper-styles/demo.css">
-
-    <custom-style>
-      <style>
-        @import url('styles.css');
-      </style>
-    </custom-style>
+    <link rel="stylesheet" href="styles.css">
   </head>
-  <body unresolved>
-    <div id="cards">
-      <paper-card heading="Bluetooth Printer">
-        <div class="card-content">
-          <paper-progress id="progress" indeterminate></paper-progress>
-        </div>
-      </paper-card>
+  <body class="min-h-screen bg-background font-sans text-foreground">
+    <div class="relative min-h-screen bg-muted/40">
+      <div class="mx-auto flex w-full max-w-6xl flex-col gap-7 px-6 py-6 lg:px-10">
+        <header class="flex flex-col gap-3 pb-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.35em] text-muted-foreground">Web Bluetooth</p>
+            <h1 class="text-2xl font-semibold tracking-tight text-foreground lg:text-[28px]">Bluetooth Printer</h1>
+          </div>
+          <button id="setupPrinter" class="group relative mt-2 inline-flex items-center gap-2 rounded-full border border-border bg-card/90 px-3.5 py-2 text-sm font-medium text-foreground shadow-sm transition hover:border-primary/60 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:mt-0">
+            <span id="printerStatusDot" class="h-2.5 w-2.5 rounded-full bg-destructive transition-colors group-hover:bg-primary"></span>
+            <span id="printerStatusLabel" class="text-sm font-semibold tracking-tight text-foreground">Printer belum tersambung</span>
+            <svg class="h-3 w-3 text-muted-foreground transition group-hover:text-primary" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.25 3.75 9.75 7l-3.5 3.25" />
+            </svg>
+            <div class="pointer-events-none absolute right-0 top-full z-10 mt-2 hidden min-w-[220px] rounded-xl border border-border bg-popover/95 px-3.5 py-2.5 text-left text-[0.75rem] text-muted-foreground shadow-xl group-hover:flex">
+              <div class="flex flex-col">
+                <span class="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Perangkat Aktif</span>
+                <span id="printerStatusDevice" class="mt-1 text-sm font-medium text-foreground">Belum ada perangkat terdeteksi.</span>
+              </div>
+            </div>
+          </button>
+        </header>
 
-      <paper-card id="preview-card" heading="Print Preview">
-        <div class="card-content" style="padding: 16px 0px">
-          <canvas id="previewCanvas" width="240" height="240"></canvas>
-        </div>
-      </paper-card>
+        <main class="grid gap-8 lg:grid-cols-[1.5fr_1fr]">
+          <section class="flex flex-col gap-6">
+            <article class="rounded-2xl border border-border bg-card shadow-sm">
+              <div class="border-b border-border px-6 py-4">
+                <h2 class="text-lg font-semibold text-foreground">Print Preview</h2>
+                <p class="mt-1 text-sm text-muted-foreground">Pratinjau hasil cetak monokrom yang sudah dihaluskan untuk lebar kertas yang dipilih.</p>
+              </div>
+              <div class="flex items-center justify-center px-6 py-10">
+                <canvas id="previewCanvas" width="240" height="240" class="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"></canvas>
+              </div>
+              <div class="border-t border-border bg-muted/50 px-6 py-3 text-xs text-muted-foreground">
+                Klik “Preview Print” untuk memuat ulang tampilan setelah mengunggah PDF.
+              </div>
+            </article>
 
-      <paper-card>
-        <div class="card-content">
-          <label for="printWidth">Paper Width</label>
-          <select id="printWidth">
-            <option value="80" selected>80 mm</option>
-            <option value="58">58 mm</option>
-          </select>
-        </div>
-      </paper-card>
+            <article class="rounded-2xl border border-border bg-card shadow-sm">
+              <div class="border-b border-border px-6 py-4">
+                <h2 class="text-lg font-semibold text-foreground">Informasi Printer</h2>
+              </div>
+              <dl class="grid gap-4 px-6 py-6 text-sm text-muted-foreground lg:grid-cols-2">
+                <div>
+                  <dt class="font-medium text-foreground">Konektivitas</dt>
+                  <dd>Bluetooth Low Energy (ESC/POS).</dd>
+                </div>
+                <div>
+                  <dt class="font-medium text-foreground">Format</dt>
+                  <dd>Kanvas hitam-putih dengan dithering Floyd-Steinberg.</dd>
+                </div>
+                <div>
+                  <dt class="font-medium text-foreground">Ukuran Maksimal</dt>
+                  <dd>576px (80 mm) atau 384px (58 mm).</dd>
+                </div>
+                <div>
+                  <dt class="font-medium text-foreground">Browser</dt>
+                  <dd>Pastikan Web Bluetooth tersedia (Chrome/Edge).</dd>
+                </div>
+              </dl>
+            </article>
+          </section>
 
-      <paper-card>
-        <div class="card-content">
-          <input type="file" id="pdfInput" accept="application/pdf">
-        </div>
-      </paper-card>
+          <aside class="flex flex-col gap-6">
+            <article class="rounded-2xl border border-border bg-card shadow-sm">
+              <div class="border-b border-border px-6 py-4">
+                <h2 class="text-base font-semibold text-foreground">Pengaturan Cetak</h2>
+              </div>
+              <div class="space-y-5 px-6 py-6">
+                <label for="printWidth" class="flex flex-col gap-2 text-sm font-medium text-foreground">
+                  Paper Width
+                  <select id="printWidth" class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                    <option value="80" selected>80 mm</option>
+                    <option value="58">58 mm</option>
+                  </select>
+                </label>
+                <label for="pdfInput" class="flex flex-col gap-2 text-sm font-medium text-foreground">
+                  Upload PDF
+                  <input type="file" id="pdfInput" accept="application/pdf" class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <span class="text-xs font-normal text-muted-foreground">PDF akan dikonversi ke bitmap hitam-putih sebelum dikirim ke printer.</span>
+                </label>
+              </div>
+            </article>
 
-      <paper-card>
-        <div class="card-content">
-          <paper-button id="setupPrinter" raised class="colorful">Setup Printer</paper-button>
-          <paper-button id="previewButton" class="colorful">Preview Print</paper-button>
-          <paper-button id="print" raised class="colorful">Print</paper-button>
-        </div>
-      </paper-card>
-
-      <paper-dialog id="dialog">
-        <h2>Error</h2>
-        <p id="dialogMessage">Could not connect to bluetooth device!</p>
-      </paper-dialog>
-      <paper-dialog id="previewDialog" with-backdrop>
-        <h2>Print Preview</h2>
-        <div>
-          <canvas id="modalPreviewCanvas" width="240" height="240"></canvas>
-        </div>
-        <div class="buttons">
-          <paper-button dialog-dismiss>Close</paper-button>
-        </div>
-      </paper-dialog>
+            <article class="rounded-2xl border border-border bg-card shadow-sm">
+              <div class="border-b border-border px-6 py-4">
+                <h2 class="text-base font-semibold text-foreground">Aksi</h2>
+                <p class="mt-1 text-sm text-muted-foreground">Setelah setup selesai, gunakan tombol berikut untuk pratinjau dan mencetak.</p>
+              </div>
+              <div class="grid gap-3 px-6 py-6">
+                <button id="previewButton" class="inline-flex h-11 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Preview Print</button>
+                <button id="print" class="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-primary-foreground shadow-md transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Print</button>
+              </div>
+            </article>
+          </aside>
+        </main>
+      </div>
     </div>
+
+    <dialog id="dialog" class="app-dialog">
+      <div class="dialog-panel">
+        <div class="flex items-start justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-foreground">Terjadi Kesalahan</h2>
+            <p id="dialogMessage" class="mt-2 text-sm text-muted-foreground">Could not connect to bluetooth device!</p>
+          </div>
+          <button type="button" id="closeError" class="ml-6 inline-flex h-9 w-9 items-center justify-center rounded-full border border-input text-muted-foreground transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <span class="sr-only">Tutup</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button type="button" id="dismissError" class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Mengerti</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="previewDialog" class="app-dialog">
+      <div class="dialog-panel">
+        <div class="flex items-start justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-foreground">Print Preview</h2>
+            <p class="mt-2 text-sm text-muted-foreground">Gambar berikut sudah siap dikirim ke printer.</p>
+          </div>
+          <button type="button" id="closePreview" class="ml-6 inline-flex h-9 w-9 items-center justify-center rounded-full border border-input text-muted-foreground transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            <span class="sr-only">Tutup</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div class="mt-6 flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/50 p-6">
+          <canvas id="modalPreviewCanvas" width="240" height="240" class="aspect-square w-full max-w-sm rounded-lg border border-border bg-background shadow-inner"></canvas>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button type="button" id="downloadPreview" class="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            Simpan sebagai PNG
+          </button>
+          <button type="button" id="confirmPreviewClose" class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            Tutup
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <script src="app.js"></script>
   </body>

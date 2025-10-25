@@ -1,6 +1,6 @@
 'use strict';
 
-document.addEventListener('WebComponentsReady', function() {
+document.addEventListener('DOMContentLoaded', () => {
   const progress = document.querySelector('#progress');
   const dialog = document.querySelector('#dialog');
   const dialogMessage = document.querySelector('#dialogMessage');
@@ -14,6 +14,75 @@ document.addEventListener('WebComponentsReady', function() {
   const previewContext = previewCanvas.getContext('2d');
   const modalPreviewCanvas = document.querySelector('#modalPreviewCanvas');
   const modalPreviewContext = modalPreviewCanvas.getContext('2d');
+  const closeErrorButton = document.querySelector('#closeError');
+  const dismissErrorButton = document.querySelector('#dismissError');
+  const closePreviewButton = document.querySelector('#closePreview');
+  const confirmPreviewClose = document.querySelector('#confirmPreviewClose');
+  const downloadPreviewButton = document.querySelector('#downloadPreview');
+  const printerStatusLabel = document.querySelector('#printerStatusLabel');
+  const printerStatusDot = document.querySelector('#printerStatusDot');
+  const printerStatusDevice = document.querySelector('#printerStatusDevice');
+  const showProgress = () => {
+    if (progress) {
+      progress.hidden = false;
+    }
+  };
+  const hideProgress = () => {
+    if (progress) {
+      progress.hidden = true;
+    }
+  };
+
+  const PRINTER_STATUS = {
+    disconnected: {
+      label: 'Printer belum tersambung',
+      hint: 'Tekan Setup Printer untuk memasangkan perangkat Bluetooth Anda.',
+      dotClass: 'bg-destructive'
+    },
+    connecting: {
+      label: 'Menyiapkan koneksi printer…',
+      hint: 'Pilih perangkat yang muncul pada dialog browser dan ikuti instruksinya.',
+      dotClass: 'bg-amber-500'
+    },
+    connected: {
+      label: 'Printer siap digunakan',
+      hint: 'Anda dapat mempratinjau atau mencetak dokumen sekarang.',
+      dotClass: 'bg-emerald-500'
+    },
+    error: {
+      label: 'Koneksi printer gagal',
+      hint: 'Periksa perangkat Bluetooth dan coba ulangi proses setup.',
+      dotClass: 'bg-destructive'
+    }
+  };
+
+  function getPrinterDisplayName(device) {
+    if (!device) {
+      return 'Belum ada perangkat terdeteksi.';
+    }
+    if (device.name && device.name.trim()) {
+      return device.name;
+    }
+    return 'Nama perangkat tidak tersedia.';
+  }
+
+  function setPrinterStatus(statusKey) {
+    if (!printerStatusLabel || !printerStatusDot) {
+      return;
+    }
+    const state = PRINTER_STATUS[statusKey] || PRINTER_STATUS.disconnected;
+    printerStatusLabel.textContent = state.label;
+    printerStatusDot.className = `h-2.5 w-2.5 rounded-full shadow-sm ${state.dotClass}`;
+  }
+
+  function setPrinterDeviceName(nameText) {
+    if (printerStatusDevice) {
+      printerStatusDevice.textContent = nameText;
+    }
+  }
+
+  setPrinterStatus('disconnected');
+  setPrinterDeviceName('Belum ada perangkat terdeteksi.');
 
   const printDataCanvas = document.createElement('canvas');
   const printDataContext = printDataCanvas.getContext('2d');
@@ -37,7 +106,7 @@ document.addEventListener('WebComponentsReady', function() {
   let lastPdfBytes = null;
   let canWriteWithoutResponse = false;
 
-  progress.hidden = true;
+  hideProgress();
 
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.10.111/pdf.worker.min.js';
@@ -54,6 +123,32 @@ document.addEventListener('WebComponentsReady', function() {
       modalPreviewContext.clearRect(0, 0, modalPreviewCanvas.width, modalPreviewCanvas.height);
       modalPreviewContext.drawImage(previewCanvas, 0, 0);
     }
+  }
+
+  function closePreviewDialog() {
+    if (!previewDialog) {
+      return;
+    }
+    if (typeof previewDialog.close === 'function') {
+      if (previewDialog.open) {
+        previewDialog.close();
+      }
+    } else {
+      previewDialog.removeAttribute('open');
+    }
+  }
+
+  if (closePreviewButton) {
+    closePreviewButton.addEventListener('click', closePreviewDialog);
+  }
+  if (confirmPreviewClose) {
+    confirmPreviewClose.addEventListener('click', closePreviewDialog);
+  }
+  if (previewDialog) {
+    previewDialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      closePreviewDialog();
+    });
   }
 
   function preparePrintData(sourceCanvas) {
@@ -280,17 +375,53 @@ document.addEventListener('WebComponentsReady', function() {
   }
 
   function showError(messageText) {
-    progress.hidden = true;
+    hideProgress();
     if (messageText) {
       dialogMessage.textContent = messageText;
     }
-    dialog.open();
+    if (dialog) {
+      if (typeof dialog.showModal === 'function') {
+        if (!dialog.open) {
+          dialog.showModal();
+        }
+      } else {
+        dialog.setAttribute('open', '');
+      }
+    } else if (dialogMessage) {
+      window.alert(dialogMessage.textContent);
+    }
+  }
+
+  function closeErrorDialog() {
+    if (!dialog) {
+      return;
+    }
+    if (typeof dialog.close === 'function') {
+      if (dialog.open) {
+        dialog.close();
+      }
+    } else {
+      dialog.removeAttribute('open');
+    }
+  }
+
+  if (closeErrorButton) {
+    closeErrorButton.addEventListener('click', closeErrorDialog);
+  }
+  if (dismissErrorButton) {
+    dismissErrorButton.addEventListener('click', closeErrorDialog);
+  }
+  if (dialog) {
+    dialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      closeErrorDialog();
+    });
   }
 
   function handleError(error) {
     console.error(error);
     if (error && error.name === 'NotFoundError') {
-      progress.hidden = true;
+      hideProgress();
       return;
     }
     const text = error && error.message ? error.message : 'Unexpected error.';
@@ -333,12 +464,16 @@ document.addEventListener('WebComponentsReady', function() {
     connectedDevice = null;
     printCharacteristic = null;
     canWriteWithoutResponse = false;
+    setPrinterStatus('disconnected');
+    setPrinterDeviceName('Belum ada perangkat terdeteksi.');
   }
 
   function connectToSelectedDevice(device) {
     if (!device) {
       return Promise.reject(new Error('No printer selected.'));
     }
+    setPrinterStatus('connecting');
+    setPrinterDeviceName('Menunggu pemilihan perangkat...');
     return device.gatt.connect()
     .then(server => server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb'))
     .then(service => service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb'))
@@ -350,6 +485,8 @@ document.addEventListener('WebComponentsReady', function() {
       attachDisconnectHandler(device);
       printCharacteristic = characteristic;
       canWriteWithoutResponse = !!(characteristic.properties && characteristic.properties.writeWithoutResponse && typeof characteristic.writeValueWithoutResponse === 'function');
+      setPrinterStatus('connected');
+      setPrinterDeviceName(getPrinterDisplayName(device));
       return characteristic;
     });
   }
@@ -359,6 +496,8 @@ document.addEventListener('WebComponentsReady', function() {
       return Promise.reject(new Error('Web Bluetooth is not supported in this browser.'));
     }
     if (!forceNewDevice && printCharacteristic && connectedDevice && connectedDevice.gatt && connectedDevice.gatt.connected) {
+      setPrinterStatus('connected');
+      setPrinterDeviceName(getPrinterDisplayName(connectedDevice));
       return Promise.resolve(printCharacteristic);
     }
     const requestOptions = {
@@ -511,13 +650,28 @@ document.addEventListener('WebComponentsReady', function() {
     return printCharacteristic.writeValue(chunk);
   }
 
-  setupButton.addEventListener('click', () => {
-    progress.hidden = false;
+  setupButton.addEventListener('click', event => {
+    event.preventDefault();
+    setPrinterStatus('connecting');
+    setPrinterDeviceName('Menunggu pemilihan perangkat...');
+    showProgress();
     ensurePrinterConnection(true)
     .then(() => {
-      progress.hidden = true;
+      hideProgress();
+      setPrinterStatus('connected');
+      setPrinterDeviceName(getPrinterDisplayName(connectedDevice));
     })
-    .catch(handleError);
+    .catch(error => {
+      hideProgress();
+      if (error && error.name === 'NotFoundError') {
+        setPrinterStatus('disconnected');
+        setPrinterDeviceName('Belum ada perangkat terdeteksi.');
+      } else {
+        setPrinterStatus('error');
+        setPrinterDeviceName('Gagal membaca perangkat.');
+      }
+      handleError(error);
+    });
   });
 
   previewButton.addEventListener('click', () => {
@@ -526,17 +680,43 @@ document.addEventListener('WebComponentsReady', function() {
       return;
     }
     syncModalPreview();
-    previewDialog.open();
+    if (previewDialog) {
+      if (typeof previewDialog.showModal === 'function') {
+        if (!previewDialog.open) {
+          previewDialog.showModal();
+        }
+      } else {
+        previewDialog.setAttribute('open', '');
+      }
+    }
   });
+
+  if (downloadPreviewButton) {
+    downloadPreviewButton.addEventListener('click', () => {
+      if (!imageDataForPrint) {
+        showError('Load a PDF before saving a preview.');
+        return;
+      }
+      const sourceCanvas = modalPreviewCanvas && modalPreviewCanvas.width ? modalPreviewCanvas : previewCanvas;
+      if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = sourceCanvas.toDataURL('image/png');
+      const widthLabel = printWidthSelect ? printWidthSelect.value : 'unknown';
+      link.download = `preview-${widthLabel}mm.png`;
+      link.click();
+    });
+  }
 
   printWidthSelect.addEventListener('change', event => {
     const value = event.target.value;
     maxPrintWidth = WIDTH_TO_PIXELS[value] || 384;
     if (lastPdfBytes) {
-      progress.hidden = false;
+      showProgress();
       renderPdfData(lastPdfBytes)
       .then(() => {
-        progress.hidden = true;
+        hideProgress();
       })
       .catch(handleError);
     } else if (sourceCanvasForPrint) {
@@ -554,14 +734,14 @@ document.addEventListener('WebComponentsReady', function() {
       event.target.value = '';
       return;
     }
-    progress.hidden = false;
+    showProgress();
     const reader = new FileReader();
     reader.onload = loadEvent => {
       const arrayBuffer = loadEvent.target.result;
       const bytes = new Uint8Array(arrayBuffer);
       renderPdfData(bytes)
       .then(() => {
-        progress.hidden = true;
+        hideProgress();
         event.target.value = '';
       })
       .catch(handleError);
@@ -604,12 +784,31 @@ document.addEventListener('WebComponentsReady', function() {
       showError('Load a PDF before printing.');
       return;
     }
-    progress.hidden = false;
+    const needsConnection = !connectedDevice || !connectedDevice.gatt || !connectedDevice.gatt.connected;
+    if (needsConnection) {
+      setPrinterStatus('connecting');
+      setPrinterDeviceName('Menyiapkan sambungan ke perangkat...');
+    }
+    showProgress();
     ensurePrinterConnection()
-    .then(() => sendPrinterData())
     .then(() => {
-      progress.hidden = true;
+      setPrinterStatus('connected');
+      setPrinterDeviceName(getPrinterDisplayName(connectedDevice));
+      return sendPrinterData();
     })
-    .catch(handleError);
+    .then(() => {
+      hideProgress();
+    })
+    .catch(error => {
+      hideProgress();
+      if (error && error.name === 'NotFoundError') {
+        setPrinterStatus('disconnected');
+        setPrinterDeviceName('Belum ada perangkat terdeteksi.');
+      } else {
+        setPrinterStatus('error');
+        setPrinterDeviceName('Gagal membaca perangkat.');
+      }
+      handleError(error);
+    });
   });
 });
