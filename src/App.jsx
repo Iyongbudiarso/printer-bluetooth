@@ -315,7 +315,6 @@ function App() {
       return;
     }
     const handleMessage = async (event) => {
-      console.log(event);
       const { data } = event;
       if (!data || data.type !== 'share-target-files' || !Array.isArray(data.files) || data.files.length === 0) {
         return;

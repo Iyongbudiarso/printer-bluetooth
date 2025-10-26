@@ -22,7 +22,6 @@ self.addEventListener('fetch', (event) => {
 
 async function processSharePayload(event) {
   try {
-    console.log(event)
     const formData = await event.request.formData();
     const incomingFiles = (formData.getAll('files') || []).filter(Boolean);
     const buffers = [];
