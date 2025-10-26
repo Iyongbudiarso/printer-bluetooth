@@ -1,0 +1,19 @@
+{
+  "rewrites": [
+    {
+      "source": "/share-target",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(sw\\.js|workbox-.*\\.js)",
+      "headers": [
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    }
+  ]
+}

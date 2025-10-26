@@ -4,14 +4,17 @@ const SHARE_TARGET_PATH = '/share-target';
 const SHARE_REDIRECT_URL = '/?share-target=1';
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'POST') {
-    return;
-  }
   const url = new URL(event.request.url);
   if (url.pathname !== SHARE_TARGET_PATH) {
     return;
   }
-  event.respondWith(handleShareTarget(event));
+  if (event.request.method === 'POST') {
+    event.respondWith(handleShareTarget(event));
+    return;
+  }
+  if (event.request.method === 'GET') {
+    event.respondWith(Response.redirect(SHARE_REDIRECT_URL, 303));
+  }
 });
 
 async function handleShareTarget(event) {

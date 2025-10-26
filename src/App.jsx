@@ -315,6 +315,7 @@ function App() {
       return;
     }
     const handleMessage = async (event) => {
+      console.log(event);
       const { data } = event;
       if (!data || data.type !== 'share-target-files' || !Array.isArray(data.files) || data.files.length === 0) {
         return;
@@ -339,6 +340,7 @@ function App() {
       }
     };
     navigator.serviceWorker.addEventListener('message', handleMessage);
+    navigator.serviceWorker.startMessages?.();
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
   }, [handleError, hideProgress, renderImageFromDataUrl, showProgress, showToast]);
 
