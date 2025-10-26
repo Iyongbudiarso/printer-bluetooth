@@ -53,12 +53,14 @@ const WIDTH_TO_PIXELS = {
   '80': 576
 };
 
-const BATCH_SIZE = 256;
+const BLE_CHUNK_SIZE_WITH_RESPONSE = 256;
+const BLE_CHUNK_SIZE_WITHOUT_RESPONSE = 120;
 const DITHER_THRESHOLD = 128;
 const WHITE_THRESHOLD = 250;
 const DEFAULT_FEED_LINES = 2;
 const DEFAULT_FEED_DOTS = 50;
-const BLE_WRITE_DELAY_MS = 10;
+const BLE_WRITE_DELAY_WITH_RESPONSE_MS = 10;
+const BLE_WRITE_DELAY_WITHOUT_RESPONSE_MS = 30;
 
 function App() {
   const [statusKey, setStatusKey] = useState('disconnected');
@@ -635,24 +637,32 @@ function App() {
     if (!characteristic) {
       throw new Error('Printer characteristic not available.');
     }
+    const valueView = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+    const bufferSlice =
+      valueView.byteOffset === 0 && valueView.byteLength === valueView.buffer.byteLength
+        ? valueView.buffer
+        : valueView.buffer.slice(valueView.byteOffset, valueView.byteOffset + valueView.byteLength);
     const performWrite = async () => {
       if (!canWriteWithoutResponseRef.current) {
-        await characteristic.writeValue(chunk);
+        await characteristic.writeValue(valueView);
         return;
       }
       try {
-        const maybePromise = characteristic.writeValueWithoutResponse(chunk);
+        const maybePromise = characteristic.writeValueWithoutResponse(bufferSlice);
         if (maybePromise?.then) {
           await maybePromise;
         }
       } catch (error) {
         canWriteWithoutResponseRef.current = false;
-        await characteristic.writeValue(chunk);
+        await characteristic.writeValue(valueView);
       }
     };
     await performWrite();
-    if (BLE_WRITE_DELAY_MS > 0) {
-      await delay(BLE_WRITE_DELAY_MS);
+    const delayMs = canWriteWithoutResponseRef.current
+      ? BLE_WRITE_DELAY_WITHOUT_RESPONSE_MS
+      : BLE_WRITE_DELAY_WITH_RESPONSE_MS;
+    if (delayMs > 0) {
+      await delay(delayMs);
     }
   }, []);
 
@@ -671,7 +681,10 @@ function App() {
           resolve();
           return;
         }
-        const end = Math.min(index + BATCH_SIZE, data.length);
+        const chunkSize = canWriteWithoutResponseRef.current
+          ? BLE_CHUNK_SIZE_WITHOUT_RESPONSE
+          : BLE_CHUNK_SIZE_WITH_RESPONSE;
+        const end = Math.min(index + chunkSize, data.length);
         const chunk = data.slice(index, end);
         writeChunk(chunk)
           .then(() => {
