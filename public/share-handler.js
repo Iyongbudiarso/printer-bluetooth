@@ -8,17 +8,21 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname !== SHARE_TARGET_PATH) {
     return;
   }
+
   if (event.request.method === 'POST') {
-    event.respondWith(handleShareTarget(event));
+    event.respondWith(Response.redirect(SHARE_REDIRECT_URL, 303));
+    event.waitUntil(processSharePayload(event));
     return;
   }
+
   if (event.request.method === 'GET') {
     event.respondWith(Response.redirect(SHARE_REDIRECT_URL, 303));
   }
 });
 
-async function handleShareTarget(event) {
+async function processSharePayload(event) {
   try {
+    console.log(event)
     const formData = await event.request.formData();
     const incomingFiles = (formData.getAll('files') || []).filter(Boolean);
     const buffers = [];
@@ -43,8 +47,6 @@ async function handleShareTarget(event) {
   } catch (error) {
     console.error('Failed to process shared content:', error);
   }
-
-  return Response.redirect(SHARE_REDIRECT_URL, 303);
 }
 
 async function resolveShareClient(event) {
@@ -66,5 +68,5 @@ async function resolveShareClient(event) {
     return matched[0];
   }
 
-  return self.clients.openWindow(SHARE_REDIRECT_URL);
+  return null;
 }
