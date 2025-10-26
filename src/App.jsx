@@ -110,6 +110,179 @@ function App() {
   const showProgress = useCallback(() => setProgressVisible(true), []);
   const hideProgress = useCallback(() => setProgressVisible(false), []);
 
+  const handleError = useCallback((error, messageOverride) => {
+    console.error(error);
+    const message = messageOverride || error?.message || 'An unknown error occurred.';
+    setErrorMessage(message);
+    hideProgress();
+  }, [hideProgress]);
+
+  const preparePrintData = useCallback((sourceCanvas) => {
+    if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
+      imageDataForPrintRef.current = null;
+      return;
+    }
+    const rawWidth = Math.min(maxPrintWidthRef.current, sourceCanvas.width);
+    const widthMultiple = Math.max(1, Math.floor(rawWidth / 8));
+    const targetWidth = widthMultiple * 8;
+    const scale = targetWidth / sourceCanvas.width;
+    const targetHeight = Math.max(8, Math.round(sourceCanvas.height * scale));
+
+    const ctx = printDataContextRef.current;
+    const canvas = printDataCanvasRef.current;
+    if (!ctx || !canvas) {
+      return;
+    }
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
+
+    let preparedImageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    preparedImageData = trimImageMargins(preparedImageData);
+    preparedImageData = scaleImageDataToWidth(preparedImageData, targetWidth);
+    applyFloydSteinbergDither(preparedImageData);
+    imageDataForPrintRef.current = preparedImageData;
+  }, []);
+
+  const syncModalPreview = useCallback(() => {
+    const modalCanvas = modalPreviewCanvasRef.current;
+    if (!modalCanvas) {
+      return;
+    }
+    let modalContext = modalPreviewContextRef.current;
+    if (!modalContext || modalContext.canvas !== modalCanvas) {
+      modalContext = modalCanvas.getContext('2d');
+      modalPreviewContextRef.current = modalContext;
+    }
+    const previewCanvas = previewCanvasRef.current;
+    const imageDataForPrint = imageDataForPrintRef.current;
+    const sourceCanvas = sourceCanvasForPrintRef.current;
+
+    if (!modalContext) {
+      return;
+    }
+    if (imageDataForPrint) {
+      modalCanvas.width = imageDataForPrint.width;
+      modalCanvas.height = imageDataForPrint.height;
+      modalContext.putImageData(imageDataForPrint, 0, 0);
+    } else if (sourceCanvas && sourceCanvas.width && sourceCanvas.height) {
+      modalCanvas.width = sourceCanvas.width;
+      modalCanvas.height = sourceCanvas.height;
+      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
+      modalContext.drawImage(sourceCanvas, 0, 0);
+    } else if (previewCanvas && previewCanvas.width && previewCanvas.height) {
+      modalCanvas.width = previewCanvas.width;
+      modalCanvas.height = previewCanvas.height;
+      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
+      modalContext.drawImage(previewCanvas, 0, 0);
+    }
+  }, []);
+
+  const copyCanvasToPreview = useCallback((sourceCanvas) => {
+    if (!sourceCanvas) {
+      return;
+    }
+    const cloned = document.createElement('canvas');
+    cloned.width = sourceCanvas.width;
+    cloned.height = sourceCanvas.height;
+    const context = cloned.getContext('2d');
+    context.imageSmoothingEnabled = true;
+    context.clearRect(0, 0, cloned.width, cloned.height);
+    context.drawImage(sourceCanvas, 0, 0);
+    sourceCanvasForPrintRef.current = cloned;
+
+    preparePrintData(cloned);
+    const previewCanvas = previewCanvasRef.current;
+    if (!previewCanvas) {
+      return;
+    }
+    let previewContext = previewContextRef.current;
+    if (!previewContext || previewContext.canvas !== previewCanvas) {
+      previewContext = previewCanvas.getContext('2d');
+      previewContextRef.current = previewContext;
+    }
+    const imageDataForPrint = imageDataForPrintRef.current;
+    if (!previewContext) {
+      return;
+    }
+    const modalCanvas = modalPreviewCanvasRef.current;
+    if (modalCanvas) {
+      let modalContext = modalPreviewContextRef.current;
+      if (!modalContext || modalContext.canvas !== modalCanvas) {
+        modalContext = modalCanvas.getContext('2d');
+        modalPreviewContextRef.current = modalContext;
+      }
+    }
+
+    if (imageDataForPrint) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imageDataForPrint.width;
+      tempCanvas.height = imageDataForPrint.height;
+      const tempContext = tempCanvas.getContext('2d');
+      tempContext.putImageData(imageDataForPrint, 0, 0);
+
+      const scale = Math.min(320 / imageDataForPrint.width, 1);
+      const previewWidth = Math.max(8, Math.round(imageDataForPrint.width * scale));
+      const previewHeight = Math.max(8, Math.round(imageDataForPrint.height * scale));
+
+      previewCanvas.width = previewWidth;
+      previewCanvas.height = previewHeight;
+      previewContext.imageSmoothingEnabled = true;
+      previewContext.clearRect(0, 0, previewWidth, previewHeight);
+      previewContext.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
+    } else {
+      previewCanvas.width = 240;
+      previewCanvas.height = 240;
+      previewContext.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
+
+    syncModalPreview();
+  }, [preparePrintData, syncModalPreview]);
+
+  const renderImageFromDataUrl = useCallback(async (dataUrl) => {
+    if (!dataUrl) {
+      throw new Error('Image data is empty.');
+    }
+    await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = image.width;
+        tempCanvas.height = image.height;
+        const tempContext = tempCanvas.getContext('2d');
+        tempContext.drawImage(image, 0, 0);
+        copyCanvasToPreview(tempCanvas);
+        resolve();
+      };
+      image.onerror = () => reject(new Error('Failed to load image.'));
+      image.src = dataUrl;
+    });
+  }, [copyCanvasToPreview]);
+
+  const showToast = useCallback((message, tone = 'info', duration = 4000) => {
+    if (!message) {
+      return;
+    }
+    if (lastToastIdRef.current) {
+      dismiss(lastToastIdRef.current);
+      lastToastIdRef.current = null;
+    }
+    const variant = tone === 'error' ? 'destructive' : 'default';
+    const titles = {
+      success: 'Success',
+      error: 'Something went wrong'
+    };
+    const nextToast = pushToast({
+      variant,
+      description: message,
+      duration,
+      ...(titles[tone] ? { title: titles[tone] } : {})
+    });
+    lastToastIdRef.current = nextToast.id;
+  }, [dismiss, pushToast]);
+
   useEffect(() => {
     if (previewCanvasRef.current && !previewContextRef.current) {
       previewContextRef.current = previewCanvasRef.current.getContext('2d');
@@ -169,41 +342,6 @@ function App() {
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
   }, [handleError, hideProgress, renderImageFromDataUrl, showProgress, showToast]);
 
-
-  const syncModalPreview = useCallback(() => {
-    const modalCanvas = modalPreviewCanvasRef.current;
-    if (!modalCanvas) {
-      return;
-    }
-    let modalContext = modalPreviewContextRef.current;
-    if (!modalContext || modalContext.canvas !== modalCanvas) {
-      modalContext = modalCanvas.getContext('2d');
-      modalPreviewContextRef.current = modalContext;
-    }
-    const previewCanvas = previewCanvasRef.current;
-    const imageDataForPrint = imageDataForPrintRef.current;
-    const sourceCanvas = sourceCanvasForPrintRef.current;
-
-    if (!modalContext) {
-      return;
-    }
-    if (imageDataForPrint) {
-      modalCanvas.width = imageDataForPrint.width;
-      modalCanvas.height = imageDataForPrint.height;
-      modalContext.putImageData(imageDataForPrint, 0, 0);
-    } else if (sourceCanvas && sourceCanvas.width && sourceCanvas.height) {
-      modalCanvas.width = sourceCanvas.width;
-      modalCanvas.height = sourceCanvas.height;
-      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
-      modalContext.drawImage(sourceCanvas, 0, 0);
-    } else if (previewCanvas && previewCanvas.width && previewCanvas.height) {
-      modalCanvas.width = previewCanvas.width;
-      modalCanvas.height = previewCanvas.height;
-      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
-      modalContext.drawImage(previewCanvas, 0, 0);
-    }
-  }, []);
-
   useEffect(() => {
     if (!isPreviewDialogOpen) {
       return;
@@ -213,28 +351,6 @@ function App() {
     });
     return () => cancelAnimationFrame(raf);
   }, [isPreviewDialogOpen, syncModalPreview]);
-
-  const showToast = useCallback((message, tone = 'info', duration = 4000) => {
-    if (!message) {
-      return;
-    }
-    if (lastToastIdRef.current) {
-      dismiss(lastToastIdRef.current);
-      lastToastIdRef.current = null;
-    }
-    const variant = tone === 'error' ? 'destructive' : 'default';
-    const titles = {
-      success: 'Success',
-      error: 'Something went wrong'
-    };
-    const nextToast = pushToast({
-      variant,
-      description: message,
-      duration,
-      ...(titles[tone] ? { title: titles[tone] } : {})
-    });
-    lastToastIdRef.current = nextToast.id;
-  }, [dismiss, pushToast]);
 
   const hideToast = useCallback(() => {
     if (!lastToastIdRef.current) {
@@ -252,13 +368,6 @@ function App() {
   const setPrinterDeviceName = useCallback((nameText) => {
     setDeviceName(nameText || 'No device detected.');
   }, []);
-
-  const handleError = useCallback((error, messageOverride) => {
-    console.error(error);
-    const message = messageOverride || error?.message || 'An unknown error occurred.';
-    setErrorMessage(message);
-    hideProgress();
-  }, [hideProgress]);
 
   const closeErrorDialog = useCallback(() => setErrorMessage(''), []);
 
@@ -354,96 +463,6 @@ function App() {
     }
   }, [connectToSelectedDevice, setPrinterDeviceName, setPrinterStatus]);
 
-  const preparePrintData = useCallback((sourceCanvas) => {
-    if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-      imageDataForPrintRef.current = null;
-      return;
-    }
-    const rawWidth = Math.min(maxPrintWidthRef.current, sourceCanvas.width);
-    const widthMultiple = Math.max(1, Math.floor(rawWidth / 8));
-    const targetWidth = widthMultiple * 8;
-    const scale = targetWidth / sourceCanvas.width;
-    const targetHeight = Math.max(8, Math.round(sourceCanvas.height * scale));
-
-    const ctx = printDataContextRef.current;
-    const canvas = printDataCanvasRef.current;
-    if (!ctx || !canvas) {
-      return;
-    }
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    ctx.imageSmoothingEnabled = true;
-    ctx.clearRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
-
-    let preparedImageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
-    preparedImageData = trimImageMargins(preparedImageData);
-    preparedImageData = scaleImageDataToWidth(preparedImageData, targetWidth);
-    applyFloydSteinbergDither(preparedImageData);
-    imageDataForPrintRef.current = preparedImageData;
-  }, []);
-
-  const copyCanvasToPreview = useCallback((sourceCanvas) => {
-    if (!sourceCanvas) {
-      return;
-    }
-    const cloned = document.createElement('canvas');
-    cloned.width = sourceCanvas.width;
-    cloned.height = sourceCanvas.height;
-    const context = cloned.getContext('2d');
-    context.imageSmoothingEnabled = true;
-    context.clearRect(0, 0, cloned.width, cloned.height);
-    context.drawImage(sourceCanvas, 0, 0);
-    sourceCanvasForPrintRef.current = cloned;
-
-    preparePrintData(cloned);
-    const previewCanvas = previewCanvasRef.current;
-    if (!previewCanvas) {
-      return;
-    }
-    let previewContext = previewContextRef.current;
-    if (!previewContext || previewContext.canvas !== previewCanvas) {
-      previewContext = previewCanvas.getContext('2d');
-      previewContextRef.current = previewContext;
-    }
-    const imageDataForPrint = imageDataForPrintRef.current;
-    if (!previewContext) {
-      return;
-    }
-    const modalCanvas = modalPreviewCanvasRef.current;
-    if (modalCanvas) {
-      let modalContext = modalPreviewContextRef.current;
-      if (!modalContext || modalContext.canvas !== modalCanvas) {
-        modalContext = modalCanvas.getContext('2d');
-        modalPreviewContextRef.current = modalContext;
-      }
-    }
-
-    if (imageDataForPrint) {
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = imageDataForPrint.width;
-      tempCanvas.height = imageDataForPrint.height;
-      const tempContext = tempCanvas.getContext('2d');
-      tempContext.putImageData(imageDataForPrint, 0, 0);
-
-      const scale = Math.min(320 / imageDataForPrint.width, 1);
-      const previewWidth = Math.max(8, Math.round(imageDataForPrint.width * scale));
-      const previewHeight = Math.max(8, Math.round(imageDataForPrint.height * scale));
-
-      previewCanvas.width = previewWidth;
-      previewCanvas.height = previewHeight;
-      previewContext.imageSmoothingEnabled = true;
-      previewContext.clearRect(0, 0, previewWidth, previewHeight);
-      previewContext.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
-    } else {
-      previewCanvas.width = 240;
-      previewCanvas.height = 240;
-      previewContext.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-    }
-
-    syncModalPreview();
-  }, [preparePrintData, syncModalPreview]);
-
   const showPreviewDialog = useCallback(() => {
     if (!imageDataForPrintRef.current) {
       showToast('Load a PDF to preview.', 'error');
@@ -457,25 +476,6 @@ function App() {
     setPreviewDialogOpen(false);
   }, []);
 
-  const renderImageFromDataUrl = useCallback(async (dataUrl) => {
-    if (!dataUrl) {
-      throw new Error('Image data is empty.');
-    }
-    await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = image.width;
-        tempCanvas.height = image.height;
-        const tempContext = tempCanvas.getContext('2d');
-        tempContext.drawImage(image, 0, 0);
-        copyCanvasToPreview(tempCanvas);
-        resolve();
-      };
-      image.onerror = () => reject(new Error('Failed to load image.'));
-      image.src = dataUrl;
-    });
-  }, [copyCanvasToPreview]);
 
   const renderPdfPage = useCallback(async (page) => {
     const viewport = page.getViewport({ scale: 1 });
