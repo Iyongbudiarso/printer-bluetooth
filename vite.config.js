@@ -44,9 +44,25 @@ export default defineConfig({
             sizes: 'any',
             type: 'image/svg+xml'
           }
-        ]
+        ],
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'shareTitle',
+            text: 'shareText',
+            files: [
+              {
+                name: 'files',
+                accept: ['image/*']
+              }
+            ]
+          }
+        }
       },
       workbox: {
+        importScripts: ['share-handler.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,json,jpg,jpeg,woff2}'],
         runtimeCaching: [
           {

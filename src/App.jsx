@@ -55,7 +55,7 @@ const WIDTH_TO_PIXELS = {
 
 const BLE_CHUNK_SIZE_WITH_RESPONSE = 256;
 const BLE_CHUNK_SIZE_WITHOUT_RESPONSE = 120;
-const DITHER_THRESHOLD = 128;
+const DITHER_THRESHOLD = 112;
 const WHITE_THRESHOLD = 250;
 const DEFAULT_FEED_LINES = 2;
 const DEFAULT_FEED_DOTS = 50;
@@ -136,6 +136,38 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printWidth]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) {
+      return;
+    }
+    const handleMessage = async (event) => {
+      const { data } = event;
+      if (!data || data.type !== 'share-target-files' || !Array.isArray(data.files) || data.files.length === 0) {
+        return;
+      }
+      showProgress();
+      try {
+        for (const filePayload of data.files) {
+          const blob = new Blob([filePayload.buffer], {
+            type: filePayload.type || 'application/octet-stream'
+          });
+          const dataUrl = await blobToDataUrl(blob);
+          lastImageDataUrlRef.current = dataUrl;
+          lastPdfBytesRef.current = null;
+          await renderImageFromDataUrl(dataUrl);
+        }
+        showToast('Shared image is ready to preview.', 'success');
+      } catch (error) {
+        showToast('Failed to load shared image.', 'error', 5000);
+        handleError(error);
+      } finally {
+        hideProgress();
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+  }, [handleError, hideProgress, renderImageFromDataUrl, showProgress, showToast]);
 
 
   const syncModalPreview = useCallback(() => {
@@ -1137,6 +1169,15 @@ function scaleImageDataToWidth(imageData, targetWidth) {
 function delay(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Failed to read shared image data.'));
+    reader.readAsDataURL(blob);
   });
 }
 
