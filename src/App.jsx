@@ -27,23 +27,23 @@ GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const PRINTER_STATUS = {
   disconnected: {
-    label: 'Printer belum tersambung',
-    hint: 'Tekan Setup Printer untuk memasangkan perangkat Bluetooth Anda.',
+    label: 'Printer not connected',
+    hint: 'Select the status button to pair your Bluetooth device.',
     dotClass: 'bg-destructive'
   },
   connecting: {
-    label: 'Menyiapkan koneksi printer…',
-    hint: 'Pilih perangkat yang muncul pada dialog browser dan ikuti instruksinya.',
+    label: 'Preparing printer connection…',
+    hint: 'Choose a device in the browser dialog and follow the prompts.',
     dotClass: 'bg-amber-500'
   },
   connected: {
-    label: 'Printer siap digunakan',
-    hint: 'Anda dapat mempratinjau atau mencetak dokumen sekarang.',
+    label: 'Printer ready to use',
+    hint: 'You can preview or print documents now.',
     dotClass: 'bg-emerald-500'
   },
   error: {
-    label: 'Koneksi printer gagal',
-    hint: 'Periksa perangkat Bluetooth dan coba ulangi proses setup.',
+    label: 'Printer connection failed',
+    hint: 'Check your Bluetooth device and try the setup again.',
     dotClass: 'bg-destructive'
   }
 };
@@ -62,7 +62,7 @@ const BLE_WRITE_DELAY_MS = 10;
 
 function App() {
   const [statusKey, setStatusKey] = useState('disconnected');
-  const [deviceName, setDeviceName] = useState('Belum ada perangkat terdeteksi.');
+  const [deviceName, setDeviceName] = useState('No device detected.');
   const [printWidth, setPrintWidth] = useState('80');
   const [isProgressVisible, setProgressVisible] = useState(false);
   const [isPreviewDialogOpen, setPreviewDialogOpen] = useState(false);
@@ -190,8 +190,8 @@ function App() {
     }
     const variant = tone === 'error' ? 'destructive' : 'default';
     const titles = {
-      success: 'Berhasil',
-      error: 'Terjadi Kesalahan'
+      success: 'Success',
+      error: 'Something went wrong'
     };
     const nextToast = pushToast({
       variant,
@@ -216,12 +216,12 @@ function App() {
   }, []);
 
   const setPrinterDeviceName = useCallback((nameText) => {
-    setDeviceName(nameText || 'Belum ada perangkat terdeteksi.');
+    setDeviceName(nameText || 'No device detected.');
   }, []);
 
   const handleError = useCallback((error, messageOverride) => {
     console.error(error);
-    const message = messageOverride || error?.message || 'Terjadi kesalahan yang tidak diketahui.';
+    const message = messageOverride || error?.message || 'An unknown error occurred.';
     setErrorMessage(message);
     hideProgress();
   }, [hideProgress]);
@@ -232,8 +232,8 @@ function App() {
     printCharacteristicRef.current = null;
     connectedDeviceRef.current = null;
     setPrinterStatus('disconnected');
-    setPrinterDeviceName('Belum ada perangkat terdeteksi.');
-    showToast('Sambungan printer terputus.', 'error', 5000);
+    setPrinterDeviceName('No device detected.');
+    showToast('Printer connection lost.', 'error', 5000);
   }, [setPrinterDeviceName, setPrinterStatus, showToast]);
 
   const attachDisconnectHandler = useCallback((device) => {
@@ -258,10 +258,10 @@ function App() {
 
   const connectToSelectedDevice = useCallback(async (device) => {
     if (!device) {
-      throw new Error('Perangkat tidak ditemukan.');
+      throw new Error('Device not found.');
     }
     setPrinterStatus('connecting');
-    setPrinterDeviceName('Menyiapkan sambungan ke perangkat...');
+    setPrinterDeviceName('Preparing device connection...');
     const server = await device.gatt.connect();
     const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
     const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
@@ -286,7 +286,7 @@ function App() {
 
   const ensurePrinterConnection = useCallback(async (forceNewDevice = false) => {
     if (!navigator.bluetooth) {
-      throw new Error('Web Bluetooth tidak didukung di browser ini.');
+      throw new Error('Web Bluetooth is not supported in this browser.');
     }
     const currentCharacteristic = printCharacteristicRef.current;
     const currentDevice = connectedDeviceRef.current;
@@ -438,7 +438,7 @@ function App() {
         copyCanvasToPreview(tempCanvas);
         resolve();
       };
-      image.onerror = () => reject(new Error('Gagal memuat gambar.'));
+      image.onerror = () => reject(new Error('Failed to load image.'));
       image.src = dataUrl;
     });
   }, [copyCanvasToPreview]);
@@ -500,7 +500,7 @@ function App() {
     }
     const fileName = file.name || 'File';
     const { type } = file;
-    showToast(`Memuat ${fileName}…`, 'info');
+    showToast(`Loading ${fileName}…`, 'info');
     if (type === 'application/pdf') {
       showProgress();
       const reader = new FileReader();
@@ -512,17 +512,17 @@ function App() {
           hideProgress();
           lastPdfBytesRef.current = bytes;
           lastImageDataUrlRef.current = null;
-          showToast(`${fileName} siap dipratinjau.`, 'success');
+          showToast(`${fileName} is ready to preview.`, 'success');
           event.target.value = '';
         } catch (error) {
           hideProgress();
-          showToast(`Gagal memuat ${fileName}.`, 'error', 5000);
+          showToast(`Failed to load ${fileName}.`, 'error', 5000);
           handleError(error);
         }
       };
       reader.onerror = () => {
         hideProgress();
-        showToast(`Gagal membaca ${fileName}.`, 'error', 5000);
+        showToast(`Failed to read ${fileName}.`, 'error', 5000);
         handleError(new Error('Failed to read the selected PDF file.'));
       };
       reader.readAsArrayBuffer(file);
@@ -538,45 +538,45 @@ function App() {
           hideProgress();
           lastImageDataUrlRef.current = dataUrl;
           lastPdfBytesRef.current = null;
-          showToast(`${fileName} siap dipratinjau.`, 'success');
+          showToast(`${fileName} is ready to preview.`, 'success');
           event.target.value = '';
         } catch (error) {
           hideProgress();
-          showToast(`Gagal memuat ${fileName}.`, 'error', 5000);
+          showToast(`Failed to load ${fileName}.`, 'error', 5000);
           handleError(error);
         }
       };
       reader.onerror = () => {
         hideProgress();
-        showToast(`Gagal membaca ${fileName}.`, 'error', 5000);
+        showToast(`Failed to read ${fileName}.`, 'error', 5000);
         handleError(new Error('Failed to read the selected image file.'));
       };
       reader.readAsDataURL(file);
       return;
     }
-    showToast('Format file tidak didukung. Pilih PDF, PNG, atau JPG.', 'error', 5000);
-    handleError(new Error('Format file tidak didukung. Pilih PDF, PNG, atau JPG.'));
+    showToast('Unsupported file format. Choose a PDF, PNG, or JPG.', 'error', 5000);
+    handleError(new Error('Unsupported file format. Choose a PDF, PNG, or JPG.'));
     event.target.value = '';
   }, [handleError, hideProgress, hideToast, renderImageFromDataUrl, renderPdfData, showProgress, showToast]);
 
   const handleSetupPrinter = useCallback(async () => {
     try {
       setPrinterStatus('connecting');
-      setPrinterDeviceName('Menunggu pemilihan perangkat...');
+      setPrinterDeviceName('Waiting for device selection...');
       showProgress();
       await ensurePrinterConnection(true);
       hideProgress();
       setPrinterStatus('connected');
       setPrinterDeviceName(getPrinterDisplayName(connectedDeviceRef.current));
-      showToast('Printer berhasil tersambung.', 'success');
+      showToast('Printer connected successfully.', 'success');
     } catch (error) {
       hideProgress();
       if (error?.name === 'NotFoundError') {
         setPrinterStatus('disconnected');
-        setPrinterDeviceName('Belum ada perangkat terdeteksi.');
+        setPrinterDeviceName('No device detected.');
       } else {
         setPrinterStatus('error');
-        setPrinterDeviceName('Gagal membaca perangkat.');
+        setPrinterDeviceName('Failed to read device.');
       }
       handleError(error);
     }
@@ -584,7 +584,7 @@ function App() {
 
   const handleDownloadPreview = useCallback(() => {
     if (!imageDataForPrintRef.current && !previewCanvasRef.current) {
-      showToast('Load a PDF sebelum menyimpan pratinjau.', 'error');
+      showToast('Load a PDF before saving the preview.', 'error');
       return;
     }
     const sourceCanvas =
@@ -696,14 +696,14 @@ function App() {
 
   const handlePrint = useCallback(async () => {
     if (!imageDataForPrintRef.current) {
-      showToast('Load a PDF sebelum mencetak.', 'error');
+      showToast('Load a PDF before printing.', 'error');
       return;
     }
     const device = connectedDeviceRef.current;
     const needsConnection = !device?.gatt?.connected || !printCharacteristicRef.current;
     if (needsConnection) {
       setPrinterStatus('connecting');
-      setPrinterDeviceName('Menyiapkan sambungan ke perangkat...');
+      setPrinterDeviceName('Preparing device connection...');
     }
     showProgress();
     try {
@@ -711,14 +711,14 @@ function App() {
       setPrinterStatus('connected');
       setPrinterDeviceName(getPrinterDisplayName(connectedDeviceRef.current));
       await sendPrinterData();
-      showToast('Data berhasil dikirim ke printer.', 'success');
+      showToast('Data sent to the printer successfully.', 'success');
     } catch (error) {
       if (error?.name === 'NotFoundError') {
         setPrinterStatus('disconnected');
-        setPrinterDeviceName('Belum ada perangkat terdeteksi.');
+        setPrinterDeviceName('No device detected.');
       } else {
         setPrinterStatus('error');
-        setPrinterDeviceName('Gagal membaca perangkat.');
+        setPrinterDeviceName('Failed to read device.');
       }
       handleError(error);
     } finally {
@@ -788,7 +788,7 @@ function App() {
             <StatusIcon className={`h-3 w-3 transition ${statusAccentClass} ${statusKey === 'connecting' ? 'animate-spin' : ''} group-hover:text-primary`} />
             <div className="pointer-events-none absolute right-0 top-full z-10 mt-2 hidden min-w-[220px] rounded-xl border border-border bg-popover/95 px-3.5 py-2.5 text-left text-[0.75rem] text-muted-foreground shadow-xl group-hover:flex">
               <div className="flex flex-col">
-                <span className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Perangkat Aktif</span>
+                <span className="text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Active Device</span>
                 <span className="mt-1 text-sm font-medium text-foreground">{deviceName}</span>
               </div>
             </div>
@@ -799,9 +799,9 @@ function App() {
           <div className="order-1 app-grid__sidebar flex flex-col gap-6">
             <Card className="rounded-2xl border-border shadow-sm">
               <CardHeader className="border-b border-border/60 pb-5">
-                <CardTitle className="text-base font-semibold">Pengaturan Cetak</CardTitle>
+                <CardTitle className="text-base font-semibold">Print Settings</CardTitle>
                 <CardDescription className="text-sm">
-                  Atur lebar kertas dan unggah file untuk diproses.
+                  Set the paper width and upload a file to process.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 pt-6">
@@ -809,7 +809,7 @@ function App() {
                   <Label htmlFor="printWidth">Paper Width</Label>
                   <Select value={printWidth} onValueChange={setPrintWidth}>
                     <SelectTrigger id="printWidth">
-                      <SelectValue placeholder="Pilih lebar kertas" />
+                      <SelectValue placeholder="Select paper width" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="80">80 mm</SelectItem>
@@ -818,7 +818,7 @@ function App() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="fileInput">Upload PDF atau Gambar</Label>
+                  <Label htmlFor="fileInput">Upload PDF or Image</Label>
                   <Input
                     id="fileInput"
                     type="file"
@@ -827,7 +827,7 @@ function App() {
                     className="cursor-pointer text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Pilih PDF, PNG, atau JPG. File akan dikonversi ke bitmap hitam-putih sebelum dicetak.
+                    Choose a PDF, PNG, or JPG. Files are converted to monochrome bitmap before printing.
                   </p>
                 </div>
               </CardContent>
@@ -835,9 +835,9 @@ function App() {
 
             <Card className="rounded-2xl border-border shadow-sm">
               <CardHeader className="border-b border-border/60 pb-4">
-                <CardTitle className="text-base font-semibold">Aksi</CardTitle>
+                <CardTitle className="text-base font-semibold">Actions</CardTitle>
                 <CardDescription className="text-sm">
-                  Setelah setup selesai, gunakan tombol berikut untuk pratinjau dan mencetak.
+                  After setup completes, use these buttons to preview and print.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 pt-6">
@@ -845,7 +845,7 @@ function App() {
                   Preview Print
                 </Button>
                 <Button variant="secondary" className="h-11 justify-center" onClick={handleDownloadPreview}>
-                  Simpan sebagai PNG
+                  Save as PNG
                 </Button>
                 <Button className="h-11 justify-center uppercase tracking-[0.12em]" onClick={handlePrint}>
                   <Printer className="mr-2 h-4 w-4" />
@@ -859,7 +859,7 @@ function App() {
             <CardHeader className="border-b border-border/60 pb-4">
               <CardTitle className="text-lg font-semibold">Print Preview</CardTitle>
               <CardDescription className="text-sm">
-                Pratinjau hasil cetak monokrom yang disesuaikan dengan lebar kertas yang dipilih.
+                Preview the monochrome output scaled to the selected paper width.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center gap-6 px-6 py-10">
@@ -870,31 +870,31 @@ function App() {
                 className="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"
               />
               <p className="text-xs text-muted-foreground">
-                Klik “Preview Print” setelah mengunggah file untuk memuat ulang tampilan.
+                Select "Preview Print" after uploading a file to refresh the preview.
               </p>
             </CardContent>
           </Card>
 
           <Card className="order-4 rounded-2xl border-border shadow-sm app-grid__info">
             <CardHeader className="border-b border-border/60 pb-4">
-              <CardTitle className="text-lg font-semibold">Informasi Printer</CardTitle>
+              <CardTitle className="text-lg font-semibold">Printer Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 px-6 py-6 text-sm text-muted-foreground lg:grid-cols-2">
               <div>
-                <p className="font-medium text-foreground">Konektivitas</p>
+                <p className="font-medium text-foreground">Connectivity</p>
                 <p>Bluetooth Low Energy (ESC/POS).</p>
               </div>
               <div>
                 <p className="font-medium text-foreground">Format</p>
-                <p>Kanvas hitam-putih dengan dithering Floyd-Steinberg.</p>
+                <p>Black-and-white canvas with Floyd-Steinberg dithering.</p>
               </div>
               <div>
-                <p className="font-medium text-foreground">Ukuran Maksimal</p>
-                <p>576px (80 mm) atau 384px (58 mm).</p>
+                <p className="font-medium text-foreground">Maximum Width</p>
+                <p>576px (80 mm) or 384px (58 mm).</p>
               </div>
               <div>
                 <p className="font-medium text-foreground">Browser</p>
-                <p>Pastikan Web Bluetooth tersedia (Chrome/Edge).</p>
+                <p>Ensure Web Bluetooth is available (Chrome/Edge).</p>
               </div>
             </CardContent>
           </Card>
@@ -904,7 +904,7 @@ function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-4 rounded-lg border border-border bg-card px-6 py-5 shadow-xl">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm font-medium text-muted-foreground">Memproses data…</p>
+              <p className="text-sm font-medium text-muted-foreground">Processing data…</p>
             </div>
           </div>
         )}
@@ -912,11 +912,11 @@ function App() {
         <Dialog open={Boolean(errorMessage)} onOpenChange={(open) => !open && closeErrorDialog()}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Terjadi Kesalahan</DialogTitle>
+              <DialogTitle>Something went wrong</DialogTitle>
               <DialogDescription>{errorMessage}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button onClick={closeErrorDialog}>Mengerti</Button>
+              <Button onClick={closeErrorDialog}>Got it</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -925,7 +925,7 @@ function App() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Print Preview</DialogTitle>
-              <DialogDescription>Gambar berikut sudah siap dikirim ke printer.</DialogDescription>
+              <DialogDescription>The preview below is ready to send to the printer.</DialogDescription>
             </DialogHeader>
             <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/50 p-6">
               <canvas
@@ -937,11 +937,11 @@ function App() {
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
               <Button variant="ghost" onClick={handleDownloadPreview}>
-                Simpan sebagai PNG
+                Save as PNG
               </Button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={closePreviewDialog}>
-                  Tutup
+                  Close
                 </Button>
                 <Button onClick={handlePrint}>
                   <Printer className="mr-2 h-4 w-4" />
@@ -1129,12 +1129,12 @@ function delay(ms) {
 
 function getPrinterDisplayName(device) {
   if (!device) {
-    return 'Belum ada perangkat terdeteksi.';
+    return 'No device detected.';
   }
   if (device.name && device.name.trim()) {
     return device.name;
   }
-  return 'Nama perangkat tidak tersedia.';
+  return 'Device name unavailable.';
 }
 
 export default App;
