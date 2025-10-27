@@ -53,14 +53,15 @@ const WIDTH_TO_PIXELS = {
   '80': 576
 };
 
-const BLE_CHUNK_SIZE_WITH_RESPONSE = 256;
+const BLE_CHUNK_SIZE_WITH_RESPONSE = 20;
 const BLE_CHUNK_SIZE_WITHOUT_RESPONSE = 120;
 const DITHER_THRESHOLD = 112;
 const WHITE_THRESHOLD = 250;
 const DEFAULT_FEED_LINES = 2;
 const DEFAULT_FEED_DOTS = 50;
-const BLE_WRITE_DELAY_WITH_RESPONSE_MS = 10;
-const BLE_WRITE_DELAY_WITHOUT_RESPONSE_MS = 30;
+const BLE_WRITE_DELAY_WITH_RESPONSE_MS = 2;
+const BLE_WRITE_DELAY_WITHOUT_RESPONSE_MS = 10;
+const PRINTER_RESET_COMMAND = new Uint8Array([0x1b, 0x40]);
 
 function App() {
   const [statusKey, setStatusKey] = useState('disconnected');
@@ -735,10 +736,11 @@ function App() {
   }, [writeChunk]);
 
   const sendPrinterData = useCallback(async () => {
+    await writeChunk(PRINTER_RESET_COMMAND);
     await sendImageData();
     await sendFeedDots(DEFAULT_FEED_DOTS);
     await sendFeedLines(DEFAULT_FEED_LINES);
-  }, [sendFeedDots, sendFeedLines, sendImageData]);
+  }, [sendFeedDots, sendFeedLines, sendImageData, writeChunk]);
 
   const handlePrint = useCallback(async () => {
     if (!imageDataForPrintRef.current) {
