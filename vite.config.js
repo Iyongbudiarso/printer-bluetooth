@@ -104,5 +104,29 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+          if (id.includes('pdfjs-dist')) {
+            return 'pdfjs';
+          }
+          if (id.includes('@radix-ui')) {
+            return 'radix-ui';
+          }
+          if (id.includes('lucide-react')) {
+            return 'lucide';
+          }
+          if (id.includes('react')) {
+            return 'react-vendor';
+          }
+          return 'vendor';
+        }
+      }
+    }
   }
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
+import { GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
 import { AlertCircle, Bluetooth, CheckCircle2, Loader2, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useBluetoothPrinter } from '@/hooks/use-bluetooth-printer';
+import { usePrintPreparation } from '@/hooks/use-print-preparation';
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -53,15 +55,6 @@ const WIDTH_TO_PIXELS = {
   '80': 576
 };
 
-const BLE_CHUNK_SIZE_WITH_RESPONSE = 20;
-const BLE_CHUNK_SIZE_WITHOUT_RESPONSE = 120;
-const DITHER_THRESHOLD = 112;
-const WHITE_THRESHOLD = 250;
-const DEFAULT_FEED_LINES = 2;
-const DEFAULT_FEED_DOTS = 50;
-const BLE_WRITE_DELAY_WITH_RESPONSE_MS = 2;
-const BLE_WRITE_DELAY_WITHOUT_RESPONSE_MS = 10;
-const PRINTER_RESET_COMMAND = new Uint8Array([0x1b, 0x40]);
 
 function App() {
   const [statusKey, setStatusKey] = useState('disconnected');
@@ -80,13 +73,8 @@ function App() {
 
   const imageDataForPrintRef = useRef(null);
   const sourceCanvasForPrintRef = useRef(null);
-  const printCharacteristicRef = useRef(null);
-  const connectedDeviceRef = useRef(null);
-  const transferDataRef = useRef(null);
-  const transferIndexRef = useRef(0);
   const lastPdfBytesRef = useRef(null);
   const lastImageDataUrlRef = useRef(null);
-  const canWriteWithoutResponseRef = useRef(false);
   const { toast: pushToast, dismiss } = useToast();
   const lastToastIdRef = useRef(null);
 
@@ -118,150 +106,6 @@ function App() {
     hideProgress();
   }, [hideProgress]);
 
-  const preparePrintData = useCallback((sourceCanvas) => {
-    if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-      imageDataForPrintRef.current = null;
-      return;
-    }
-    const rawWidth = Math.min(maxPrintWidthRef.current, sourceCanvas.width);
-    const widthMultiple = Math.max(1, Math.floor(rawWidth / 8));
-    const targetWidth = widthMultiple * 8;
-    const scale = targetWidth / sourceCanvas.width;
-    const targetHeight = Math.max(8, Math.round(sourceCanvas.height * scale));
-
-    const ctx = printDataContextRef.current;
-    const canvas = printDataCanvasRef.current;
-    if (!ctx || !canvas) {
-      return;
-    }
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    ctx.imageSmoothingEnabled = true;
-    ctx.clearRect(0, 0, targetWidth, targetHeight);
-    ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
-
-    let preparedImageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
-    preparedImageData = trimImageMargins(preparedImageData);
-    preparedImageData = scaleImageDataToWidth(preparedImageData, targetWidth);
-    applyFloydSteinbergDither(preparedImageData);
-    imageDataForPrintRef.current = preparedImageData;
-  }, []);
-
-  const syncModalPreview = useCallback(() => {
-    const modalCanvas = modalPreviewCanvasRef.current;
-    if (!modalCanvas) {
-      return;
-    }
-    let modalContext = modalPreviewContextRef.current;
-    if (!modalContext || modalContext.canvas !== modalCanvas) {
-      modalContext = modalCanvas.getContext('2d');
-      modalPreviewContextRef.current = modalContext;
-    }
-    const previewCanvas = previewCanvasRef.current;
-    const imageDataForPrint = imageDataForPrintRef.current;
-    const sourceCanvas = sourceCanvasForPrintRef.current;
-
-    if (!modalContext) {
-      return;
-    }
-    if (imageDataForPrint) {
-      modalCanvas.width = imageDataForPrint.width;
-      modalCanvas.height = imageDataForPrint.height;
-      modalContext.putImageData(imageDataForPrint, 0, 0);
-    } else if (sourceCanvas && sourceCanvas.width && sourceCanvas.height) {
-      modalCanvas.width = sourceCanvas.width;
-      modalCanvas.height = sourceCanvas.height;
-      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
-      modalContext.drawImage(sourceCanvas, 0, 0);
-    } else if (previewCanvas && previewCanvas.width && previewCanvas.height) {
-      modalCanvas.width = previewCanvas.width;
-      modalCanvas.height = previewCanvas.height;
-      modalContext.clearRect(0, 0, modalCanvas.width, modalCanvas.height);
-      modalContext.drawImage(previewCanvas, 0, 0);
-    }
-  }, []);
-
-  const copyCanvasToPreview = useCallback((sourceCanvas) => {
-    if (!sourceCanvas) {
-      return;
-    }
-    const cloned = document.createElement('canvas');
-    cloned.width = sourceCanvas.width;
-    cloned.height = sourceCanvas.height;
-    const context = cloned.getContext('2d');
-    context.imageSmoothingEnabled = true;
-    context.clearRect(0, 0, cloned.width, cloned.height);
-    context.drawImage(sourceCanvas, 0, 0);
-    sourceCanvasForPrintRef.current = cloned;
-
-    preparePrintData(cloned);
-    const previewCanvas = previewCanvasRef.current;
-    if (!previewCanvas) {
-      return;
-    }
-    let previewContext = previewContextRef.current;
-    if (!previewContext || previewContext.canvas !== previewCanvas) {
-      previewContext = previewCanvas.getContext('2d');
-      previewContextRef.current = previewContext;
-    }
-    const imageDataForPrint = imageDataForPrintRef.current;
-    if (!previewContext) {
-      return;
-    }
-    const modalCanvas = modalPreviewCanvasRef.current;
-    if (modalCanvas) {
-      let modalContext = modalPreviewContextRef.current;
-      if (!modalContext || modalContext.canvas !== modalCanvas) {
-        modalContext = modalCanvas.getContext('2d');
-        modalPreviewContextRef.current = modalContext;
-      }
-    }
-
-    if (imageDataForPrint) {
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = imageDataForPrint.width;
-      tempCanvas.height = imageDataForPrint.height;
-      const tempContext = tempCanvas.getContext('2d');
-      tempContext.putImageData(imageDataForPrint, 0, 0);
-
-      const scale = Math.min(320 / imageDataForPrint.width, 1);
-      const previewWidth = Math.max(8, Math.round(imageDataForPrint.width * scale));
-      const previewHeight = Math.max(8, Math.round(imageDataForPrint.height * scale));
-
-      previewCanvas.width = previewWidth;
-      previewCanvas.height = previewHeight;
-      previewContext.imageSmoothingEnabled = true;
-      previewContext.clearRect(0, 0, previewWidth, previewHeight);
-      previewContext.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
-    } else {
-      previewCanvas.width = 240;
-      previewCanvas.height = 240;
-      previewContext.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-    }
-
-    syncModalPreview();
-  }, [preparePrintData, syncModalPreview]);
-
-  const renderImageFromDataUrl = useCallback(async (dataUrl) => {
-    if (!dataUrl) {
-      throw new Error('Image data is empty.');
-    }
-    await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = image.width;
-        tempCanvas.height = image.height;
-        const tempContext = tempCanvas.getContext('2d');
-        tempContext.drawImage(image, 0, 0);
-        copyCanvasToPreview(tempCanvas);
-        resolve();
-      };
-      image.onerror = () => reject(new Error('Failed to load image.'));
-      image.src = dataUrl;
-    });
-  }, [copyCanvasToPreview]);
-
   const showToast = useCallback((message, tone = 'info', duration = 4000) => {
     if (!message) {
       return;
@@ -283,6 +127,43 @@ function App() {
     });
     lastToastIdRef.current = nextToast.id;
   }, [dismiss, pushToast]);
+
+  const hideToast = useCallback(() => {
+    if (!lastToastIdRef.current) {
+      return;
+    }
+    dismiss(lastToastIdRef.current);
+    lastToastIdRef.current = null;
+  }, [dismiss]);
+
+  const {
+    copyCanvasToPreview,
+    renderImageFromDataUrl,
+    reloadLastPdf,
+    reloadLastImage,
+    handleFileChange,
+    handleDownloadPreview,
+    syncModalPreview,
+    getImagePrintData
+  } = usePrintPreparation({
+    previewCanvasRef,
+    modalPreviewCanvasRef,
+    previewContextRef,
+    modalPreviewContextRef,
+    printDataCanvasRef,
+    printDataContextRef,
+    maxPrintWidthRef,
+    imageDataForPrintRef,
+    sourceCanvasForPrintRef,
+    lastPdfBytesRef,
+    lastImageDataUrlRef,
+    showToast,
+    showProgress,
+    hideProgress,
+    hideToast,
+    handleError,
+    printWidth
+  });
 
   useEffect(() => {
     if (previewCanvasRef.current && !previewContextRef.current) {
@@ -354,14 +235,6 @@ function App() {
     return () => cancelAnimationFrame(raf);
   }, [isPreviewDialogOpen, syncModalPreview]);
 
-  const hideToast = useCallback(() => {
-    if (!lastToastIdRef.current) {
-      return;
-    }
-    dismiss(lastToastIdRef.current);
-    lastToastIdRef.current = null;
-  }, [dismiss]);
-
   const setPrinterStatus = useCallback((key) => {
     const next = PRINTER_STATUS[key] ? key : 'disconnected';
     setStatusKey(next);
@@ -372,98 +245,6 @@ function App() {
   }, []);
 
   const closeErrorDialog = useCallback(() => setErrorMessage(''), []);
-
-  const handleDeviceDisconnect = useCallback(() => {
-    printCharacteristicRef.current = null;
-    connectedDeviceRef.current = null;
-    setPrinterStatus('disconnected');
-    setPrinterDeviceName('No device detected.');
-    showToast('Printer connection lost.', 'error', 5000);
-  }, [setPrinterDeviceName, setPrinterStatus, showToast]);
-
-  const attachDisconnectHandler = useCallback((device) => {
-    if (!device) {
-      return;
-    }
-    device.addEventListener('gattserverdisconnected', handleDeviceDisconnect);
-  }, [handleDeviceDisconnect]);
-
-  const detachDisconnectHandler = useCallback((device) => {
-    if (!device) {
-      return;
-    }
-    device.removeEventListener('gattserverdisconnected', handleDeviceDisconnect);
-  }, [handleDeviceDisconnect]);
-
-  const disconnectDevice = useCallback((device) => {
-    if (device?.gatt?.connected) {
-      device.gatt.disconnect();
-    }
-  }, []);
-
-  const connectToSelectedDevice = useCallback(async (device) => {
-    if (!device) {
-      throw new Error('Device not found.');
-    }
-    setPrinterStatus('connecting');
-    setPrinterDeviceName('Preparing device connection...');
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
-    const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
-
-    if (connectedDeviceRef.current && connectedDeviceRef.current !== device) {
-      detachDisconnectHandler(connectedDeviceRef.current);
-      disconnectDevice(connectedDeviceRef.current);
-    }
-
-    connectedDeviceRef.current = device;
-    attachDisconnectHandler(device);
-    printCharacteristicRef.current = characteristic;
-    canWriteWithoutResponseRef.current = !!(
-      characteristic.properties?.writeWithoutResponse &&
-      typeof characteristic.writeValueWithoutResponse === 'function'
-    );
-
-    setPrinterStatus('connected');
-    setPrinterDeviceName(getPrinterDisplayName(device));
-    return characteristic;
-  }, [attachDisconnectHandler, detachDisconnectHandler, disconnectDevice, setPrinterDeviceName, setPrinterStatus]);
-
-  const ensurePrinterConnection = useCallback(async (forceNewDevice = false) => {
-    if (!navigator.bluetooth) {
-      throw new Error('Web Bluetooth is not supported in this browser.');
-    }
-    const currentCharacteristic = printCharacteristicRef.current;
-    const currentDevice = connectedDeviceRef.current;
-    if (!forceNewDevice && currentCharacteristic && currentDevice?.gatt?.connected) {
-      setPrinterStatus('connected');
-      setPrinterDeviceName(getPrinterDisplayName(currentDevice));
-      return currentCharacteristic;
-    }
-
-    const requestOptions = {
-      filters: [
-        { services: ['000018f0-0000-1000-8000-00805f9b34fb'] }
-      ]
-    };
-
-    const selectDevice = async (device) => {
-      const characteristic = await connectToSelectedDevice(device);
-      return characteristic;
-    };
-
-    if (forceNewDevice || !currentDevice) {
-      const device = await navigator.bluetooth.requestDevice(requestOptions);
-      return selectDevice(device);
-    }
-
-    try {
-      return await selectDevice(currentDevice);
-    } catch (error) {
-      const device = await navigator.bluetooth.requestDevice(requestOptions);
-      return selectDevice(device);
-    }
-  }, [connectToSelectedDevice, setPrinterDeviceName, setPrinterStatus]);
 
   const showPreviewDialog = useCallback(() => {
     if (!imageDataForPrintRef.current) {
@@ -479,343 +260,17 @@ function App() {
   }, []);
 
 
-  const renderPdfPage = useCallback(async (page) => {
-    const viewport = page.getViewport({ scale: 1 });
-    const scale = maxPrintWidthRef.current / viewport.width;
-    const scaledViewport = page.getViewport({ scale });
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = Math.round(scaledViewport.width);
-    tempCanvas.height = Math.round(scaledViewport.height);
-    const ctx = tempCanvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-    copyCanvasToPreview(tempCanvas);
-  }, [copyCanvasToPreview]);
-
-  const renderPdfData = useCallback(async (bytes) => {
-    lastPdfBytesRef.current = bytes;
-    lastImageDataUrlRef.current = null;
-    const loadingTask = getDocument({ data: bytes });
-    const document = await loadingTask.promise;
-    const page = await document.getPage(1);
-    await renderPdfPage(page);
-  }, [renderPdfPage]);
-
-  const reloadLastPdf = useCallback(async () => {
-    if (!lastPdfBytesRef.current) {
-      return;
-    }
-    showProgress();
-    try {
-      await renderPdfData(lastPdfBytesRef.current);
-    } catch (error) {
-      handleError(error);
-    } finally {
-      hideProgress();
-    }
-  }, [hideProgress, renderPdfData, handleError, showProgress]);
-
-  const reloadLastImage = useCallback(async () => {
-    if (!lastImageDataUrlRef.current) {
-      return;
-    }
-    showProgress();
-    try {
-      await renderImageFromDataUrl(lastImageDataUrlRef.current);
-    } catch (error) {
-      handleError(error);
-    } finally {
-      hideProgress();
-    }
-  }, [hideProgress, handleError, renderImageFromDataUrl, showProgress]);
-
-  const handleFileChange = useCallback(async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      hideToast();
-      return;
-    }
-    const fileName = file.name || 'File';
-    const { type } = file;
-    showToast(`Loading ${fileName}…`, 'info');
-    if (type === 'application/pdf') {
-      showProgress();
-      const reader = new FileReader();
-      reader.onload = async (loadEvent) => {
-        try {
-          const arrayBuffer = loadEvent.target.result;
-          const bytes = new Uint8Array(arrayBuffer);
-          await renderPdfData(bytes);
-          hideProgress();
-          lastPdfBytesRef.current = bytes;
-          lastImageDataUrlRef.current = null;
-          showToast(`${fileName} is ready to preview.`, 'success');
-          event.target.value = '';
-        } catch (error) {
-          hideProgress();
-          showToast(`Failed to load ${fileName}.`, 'error', 5000);
-          handleError(error);
-        }
-      };
-      reader.onerror = () => {
-        hideProgress();
-        showToast(`Failed to read ${fileName}.`, 'error', 5000);
-        handleError(new Error('Failed to read the selected PDF file.'));
-      };
-      reader.readAsArrayBuffer(file);
-      return;
-    }
-    if (type === 'image/png' || type === 'image/jpeg') {
-      showProgress();
-      const reader = new FileReader();
-      reader.onload = async (loadEvent) => {
-        try {
-          const dataUrl = loadEvent.target.result;
-          await renderImageFromDataUrl(dataUrl);
-          hideProgress();
-          lastImageDataUrlRef.current = dataUrl;
-          lastPdfBytesRef.current = null;
-          showToast(`${fileName} is ready to preview.`, 'success');
-          event.target.value = '';
-        } catch (error) {
-          hideProgress();
-          showToast(`Failed to load ${fileName}.`, 'error', 5000);
-          handleError(error);
-        }
-      };
-      reader.onerror = () => {
-        hideProgress();
-        showToast(`Failed to read ${fileName}.`, 'error', 5000);
-        handleError(new Error('Failed to read the selected image file.'));
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-    showToast('Unsupported file format. Choose a PDF, PNG, or JPG.', 'error', 5000);
-    handleError(new Error('Unsupported file format. Choose a PDF, PNG, or JPG.'));
-    event.target.value = '';
-  }, [handleError, hideProgress, hideToast, renderImageFromDataUrl, renderPdfData, showProgress, showToast]);
-
-  const handleSetupPrinter = useCallback(async () => {
-    try {
-      setPrinterStatus('connecting');
-      setPrinterDeviceName('Waiting for device selection...');
-      showProgress();
-      await ensurePrinterConnection(true);
-      hideProgress();
-      setPrinterStatus('connected');
-      setPrinterDeviceName(getPrinterDisplayName(connectedDeviceRef.current));
-      showToast('Printer connected successfully.', 'success');
-    } catch (error) {
-      hideProgress();
-      if (error?.name === 'NotFoundError') {
-        setPrinterStatus('disconnected');
-        setPrinterDeviceName('No device detected.');
-      } else {
-        setPrinterStatus('error');
-        setPrinterDeviceName('Failed to read device.');
-      }
-      handleError(error);
-    }
-  }, [ensurePrinterConnection, getPrinterDisplayName, handleError, hideProgress, setPrinterDeviceName, setPrinterStatus, showProgress, showToast]);
-
-  const handleDownloadPreview = useCallback(() => {
-    if (!imageDataForPrintRef.current && !previewCanvasRef.current) {
-      showToast('Load a PDF before saving the preview.', 'error');
-      return;
-    }
-    const sourceCanvas =
-      modalPreviewCanvasRef.current && modalPreviewCanvasRef.current.width
-        ? modalPreviewCanvasRef.current
-        : previewCanvasRef.current;
-    if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-      return;
-    }
-    const link = document.createElement('a');
-    link.href = sourceCanvas.toDataURL('image/png');
-    link.download = `preview-${printWidth || 'unknown'}mm.png`;
-    link.click();
-  }, [printWidth, showToast]);
-
-  const sendFeedDots = useCallback(async (dots) => {
-    const characteristic = printCharacteristicRef.current;
-    if (!characteristic) {
-      return;
-    }
-    let remaining = Math.min(1020, Math.max(0, dots | 0));
-    if (remaining === 0) {
-      return;
-    }
-    while (remaining > 0) {
-      const amount = Math.min(255, remaining);
-      const command = new Uint8Array([0x1b, 0x4a, amount]);
-      await characteristic.writeValue(command);
-      remaining -= amount;
-    }
-  }, []);
-
-  const sendFeedLines = useCallback(async (lines) => {
-    const characteristic = printCharacteristicRef.current;
-    if (!characteristic) {
-      return;
-    }
-    const count = Math.min(255, Math.max(0, lines | 0));
-    if (count === 0) {
-      return;
-    }
-    const command = new Uint8Array([0x1b, 0x64, count]);
-    await characteristic.writeValue(command);
-  }, []);
-
-  const writeChunk = useCallback(async (chunk) => {
-    const characteristic = printCharacteristicRef.current;
-    if (!characteristic) {
-      throw new Error('Printer characteristic not available.');
-    }
-    const valueView = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
-    const bufferSlice =
-      valueView.byteOffset === 0 && valueView.byteLength === valueView.buffer.byteLength
-        ? valueView.buffer
-        : valueView.buffer.slice(valueView.byteOffset, valueView.byteOffset + valueView.byteLength);
-    const performWrite = async () => {
-      if (!canWriteWithoutResponseRef.current) {
-        await characteristic.writeValue(valueView);
-        return;
-      }
-      try {
-        const maybePromise = characteristic.writeValueWithoutResponse(bufferSlice);
-        if (maybePromise?.then) {
-          await maybePromise;
-        }
-      } catch (error) {
-        canWriteWithoutResponseRef.current = false;
-        await characteristic.writeValue(valueView);
-      }
-    };
-    await performWrite();
-    const delayMs = canWriteWithoutResponseRef.current
-      ? BLE_WRITE_DELAY_WITHOUT_RESPONSE_MS
-      : BLE_WRITE_DELAY_WITH_RESPONSE_MS;
-    if (delayMs > 0) {
-      await delay(delayMs);
-    }
-  }, []);
-
-  const sendImageData = useCallback(async () => {
-    const transferData = getImagePrintData();
-    transferDataRef.current = transferData;
-    if (!transferData.length || transferData.length <= 8) {
-      return;
-    }
-    transferIndexRef.current = 0;
-    await new Promise((resolve, reject) => {
-      const step = () => {
-        const data = transferDataRef.current;
-        const index = transferIndexRef.current;
-        if (!data || index >= data.length) {
-          resolve();
-          return;
-        }
-        const chunkSize = canWriteWithoutResponseRef.current
-          ? BLE_CHUNK_SIZE_WITHOUT_RESPONSE
-          : BLE_CHUNK_SIZE_WITH_RESPONSE;
-        const end = Math.min(index + chunkSize, data.length);
-        const chunk = data.slice(index, end);
-        writeChunk(chunk)
-          .then(() => {
-            transferIndexRef.current = end;
-            if (transferIndexRef.current < data.length) {
-              step();
-            } else {
-              resolve();
-            }
-          })
-          .catch(reject);
-      };
-      step();
-    });
-  }, [writeChunk]);
-
-  const sendPrinterData = useCallback(async () => {
-    await writeChunk(PRINTER_RESET_COMMAND);
-    await sendImageData();
-    await sendFeedDots(DEFAULT_FEED_DOTS);
-    await sendFeedLines(DEFAULT_FEED_LINES);
-  }, [sendFeedDots, sendFeedLines, sendImageData, writeChunk]);
-
-  const handlePrint = useCallback(async () => {
-    if (!imageDataForPrintRef.current) {
-      showToast('Load a PDF before printing.', 'error');
-      return;
-    }
-    const device = connectedDeviceRef.current;
-    const needsConnection = !device?.gatt?.connected || !printCharacteristicRef.current;
-    if (needsConnection) {
-      setPrinterStatus('connecting');
-      setPrinterDeviceName('Preparing device connection...');
-    }
-    showProgress();
-    try {
-      await ensurePrinterConnection();
-      setPrinterStatus('connected');
-      setPrinterDeviceName(getPrinterDisplayName(connectedDeviceRef.current));
-      await sendPrinterData();
-      showToast('Data sent to the printer successfully.', 'success');
-    } catch (error) {
-      if (error?.name === 'NotFoundError') {
-        setPrinterStatus('disconnected');
-        setPrinterDeviceName('No device detected.');
-      } else {
-        setPrinterStatus('error');
-        setPrinterDeviceName('Failed to read device.');
-      }
-      handleError(error);
-    } finally {
-      hideProgress();
-    }
-  }, [ensurePrinterConnection, getPrinterDisplayName, handleError, hideProgress, sendPrinterData, setPrinterDeviceName, setPrinterStatus, showProgress, showToast]);
-
-  const getImagePrintData = useCallback(() => {
-    const imageData = imageDataForPrintRef.current;
-    if (!imageData) {
-      return new Uint8Array([]);
-    }
-    const { width, height, data } = imageData;
-    const bytesPerRow = width / 8;
-    const total = bytesPerRow * height;
-    const printBytes = new Uint8Array(total + 8);
-    printBytes[0] = 29;
-    printBytes[1] = 118;
-    printBytes[2] = 48;
-    printBytes[3] = 0;
-    printBytes[4] = bytesPerRow;
-    printBytes[5] = 0;
-    printBytes[6] = height % 256;
-    printBytes[7] = Math.floor(height / 256);
-
-    let offset = 7;
-    for (let y = 0; y < height; y++) {
-      for (let xByte = 0; xByte < bytesPerRow; xByte++) {
-        let byte = 0;
-        for (let bit = 0; bit < 8; bit++) {
-          const x = xByte * 8 + bit;
-          const idx = (y * width + x) * 4;
-          const red = data[idx];
-          const green = data[idx + 1];
-          const blue = data[idx + 2];
-          const alpha = data[idx + 3];
-          if (alpha === 0) {
-            continue;
-          }
-          const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
-          if (luminance < DITHER_THRESHOLD) {
-            byte |= 1 << (7 - bit);
-          }
-        }
-        printBytes[++offset] = byte;
-      }
-    }
-    return printBytes;
-  }, []);
+  const { handleSetupPrinter, handlePrint } = useBluetoothPrinter({
+    imageDataForPrintRef,
+    getImagePrintData,
+    showProgress,
+    hideProgress,
+    showToast,
+    handleError,
+    getPrinterDisplayName,
+    setPrinterStatus,
+    setPrinterDeviceName
+  });
 
   return (
     <div className="relative min-h-screen bg-muted/40">
@@ -1002,177 +457,6 @@ function App() {
       </div>
     </div>
   );
-}
-
-function applyFloydSteinbergDither(imageData) {
-  const { data, width, height } = imageData;
-  const errorBuffer = new Float32Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x;
-      const dataIdx = idx * 4;
-      const red = data[dataIdx];
-      const green = data[dataIdx + 1];
-      const blue = data[dataIdx + 2];
-      const baseGray = 0.299 * red + 0.587 * green + 0.114 * blue;
-      const adjustedGray = baseGray + errorBuffer[idx];
-      const output = adjustedGray >= DITHER_THRESHOLD ? 255 : 0;
-      const error = adjustedGray - output;
-
-      data[dataIdx] = output;
-      data[dataIdx + 1] = output;
-      data[dataIdx + 2] = output;
-      data[dataIdx + 3] = 255;
-
-      if (x + 1 < width) {
-        errorBuffer[idx + 1] += (error * 7) / 16;
-      }
-      if (y + 1 < height) {
-        if (x > 0) {
-          errorBuffer[idx + width - 1] += (error * 3) / 16;
-        }
-        errorBuffer[idx + width] += (error * 5) / 16;
-        if (x + 1 < width) {
-          errorBuffer[idx + width + 1] += (error * 1) / 16;
-        }
-      }
-    }
-  }
-}
-
-function trimImageMargins(sourceImageData) {
-  if (!sourceImageData) {
-    return null;
-  }
-  const { data, width, height } = sourceImageData;
-  let top = 0;
-  let bottom = height - 1;
-  let left = 0;
-  let right = width - 1;
-
-  const pixelIsWhite = (index) => {
-    const alpha = data[index + 3];
-    if (alpha <= 10) {
-      return true;
-    }
-    const red = data[index];
-    const green = data[index + 1];
-    const blue = data[index + 2];
-    const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
-    return luminance >= WHITE_THRESHOLD;
-  };
-
-  const rowIsWhite = (y) => {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      if (!pixelIsWhite((rowOffset + x) * 4)) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const columnIsWhite = (x, startY, endY) => {
-    if (startY > endY) {
-      return true;
-    }
-    for (let y = startY; y <= endY; y++) {
-      if (!pixelIsWhite((y * width + x) * 4)) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  while (top < height && rowIsWhite(top)) {
-    top++;
-  }
-  while (bottom >= top && rowIsWhite(bottom)) {
-    bottom--;
-  }
-  while (left < width && columnIsWhite(left, top, bottom)) {
-    left++;
-  }
-  while (right >= left && columnIsWhite(right, top, bottom)) {
-    right--;
-  }
-
-  if (top > bottom || left > right) {
-    return sourceImageData;
-  }
-
-  let trimWidth = right - left + 1;
-  const trimHeight = bottom - top + 1;
-  const remainder = trimWidth % 8;
-  if (remainder !== 0) {
-    const extra = 8 - remainder;
-    const extraLeft = Math.floor(extra / 2);
-    const extraRight = extra - extraLeft;
-    left = Math.max(0, left - extraLeft);
-    right = Math.min(width - 1, right + extraRight);
-    trimWidth = right - left + 1;
-    if (trimWidth % 8 !== 0) {
-      const targetWidth = Math.min(width, Math.ceil(trimWidth / 8) * 8);
-      right = Math.min(width - 1, left + targetWidth - 1);
-      trimWidth = right - left + 1;
-      if (trimWidth % 8 !== 0) {
-        left = Math.max(0, right - targetWidth + 1);
-        trimWidth = right - left + 1;
-      }
-    }
-  }
-
-  const trimmedCanvas = document.createElement('canvas');
-  trimmedCanvas.width = trimWidth;
-  trimmedCanvas.height = trimHeight;
-  const ctx = trimmedCanvas.getContext('2d');
-  ctx.putImageData(sourceImageData, -left, -top);
-  return ctx.getImageData(0, 0, trimWidth, trimHeight);
-}
-
-function scaleImageDataToWidth(imageData, targetWidth) {
-  if (!imageData) {
-    return null;
-  }
-  if (imageData.width === targetWidth) {
-    return imageData;
-  }
-  const scale = targetWidth / imageData.width;
-  const scaledWidth = Math.min(targetWidth, Math.round(imageData.width * scale));
-  const scaledHeight = Math.max(8, Math.round(imageData.height * scale));
-  const sourceCanvas = document.createElement('canvas');
-  sourceCanvas.width = imageData.width;
-  sourceCanvas.height = imageData.height;
-  const sourceCtx = sourceCanvas.getContext('2d');
-  sourceCtx.putImageData(imageData, 0, 0);
-
-  const scaledCanvas = document.createElement('canvas');
-  scaledCanvas.width = targetWidth;
-  scaledCanvas.height = scaledHeight;
-  const scaledCtx = scaledCanvas.getContext('2d');
-  scaledCtx.imageSmoothingEnabled = true;
-  scaledCtx.fillStyle = '#ffffff';
-  scaledCtx.fillRect(0, 0, scaledCanvas.width, scaledCanvas.height);
-  const offsetX = Math.floor((targetWidth - scaledWidth) / 2);
-  scaledCtx.drawImage(
-    sourceCanvas,
-    0,
-    0,
-    sourceCanvas.width,
-    sourceCanvas.height,
-    offsetX,
-    0,
-    scaledWidth,
-    scaledHeight
-  );
-
-  return scaledCtx.getImageData(0, 0, scaledCanvas.width, scaledCanvas.height);
-}
-
-function delay(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
 }
 
 function blobToDataUrl(blob) {
