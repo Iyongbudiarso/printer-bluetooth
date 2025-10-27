@@ -842,7 +842,27 @@ function App() {
         </header>
 
         <main className="app-grid gap-8">
-          <div className="order-1 app-grid__sidebar flex flex-col gap-6">
+          <Card className="order-1 rounded-2xl border-border shadow-sm app-grid__preview">
+            <CardHeader className="border-b border-border/60 pb-4">
+              <CardTitle className="text-lg font-semibold">Print Preview</CardTitle>
+              <CardDescription className="text-sm">
+                Preview the monochrome output scaled to the selected paper width.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-6 px-6 py-10">
+              <canvas
+                ref={previewCanvasRef}
+                width="240"
+                height="240"
+                className="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"
+              />
+              <p className="text-xs text-muted-foreground">
+                Select "Preview Print" after uploading a file to refresh the preview.
+              </p>
+            </CardContent>
+          </Card>
+
+          <div className="order-2 app-grid__sidebar flex flex-col gap-6">
             <Card className="rounded-2xl border-border shadow-sm">
               <CardHeader className="border-b border-border/60 pb-5">
                 <CardTitle className="text-base font-semibold">Print Settings</CardTitle>
@@ -900,26 +920,6 @@ function App() {
               </CardContent>
             </Card>
           </div>
-
-          <Card className="order-2 rounded-2xl border-border shadow-sm app-grid__preview">
-            <CardHeader className="border-b border-border/60 pb-4">
-              <CardTitle className="text-lg font-semibold">Print Preview</CardTitle>
-              <CardDescription className="text-sm">
-                Preview the monochrome output scaled to the selected paper width.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center gap-6 px-6 py-10">
-              <canvas
-                ref={previewCanvasRef}
-                width="240"
-                height="240"
-                className="aspect-square w-full max-w-xs rounded-xl border border-dashed border-border bg-background/50 shadow-inner"
-              />
-              <p className="text-xs text-muted-foreground">
-                Select "Preview Print" after uploading a file to refresh the preview.
-              </p>
-            </CardContent>
-          </Card>
 
           <Card className="order-4 rounded-2xl border-border shadow-sm app-grid__info">
             <CardHeader className="border-b border-border/60 pb-4">
