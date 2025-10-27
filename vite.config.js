@@ -121,9 +121,6 @@ export default defineConfig({
           if (id.includes('lucide-react')) {
             return 'lucide';
           }
-          if (id.includes('react')) {
-            return 'react-vendor';
-          }
           return 'vendor';
         }
       }
