@@ -16,6 +16,7 @@ export function usePrintPreparation({
   sourceCanvasForPrintRef,
   lastPdfBytesRef,
   lastImageDataUrlRef,
+  rotationDegRef,
   showToast,
   showProgress,
   hideProgress,
@@ -99,7 +100,10 @@ export function usePrintPreparation({
     context.drawImage(sourceCanvas, 0, 0);
     sourceCanvasForPrintRef.current = cloned;
 
-    preparePrintData(cloned);
+    const rotation = rotationDegRef?.current || 0;
+    const rotated = rotation ? rotateCanvas(cloned, rotation) : cloned;
+
+    preparePrintData(rotated);
     const previewCanvas = previewCanvasRef.current;
     if (!previewCanvas) {
       return;
@@ -145,7 +149,7 @@ export function usePrintPreparation({
     }
 
     syncModalPreview();
-  }, [imageDataForPrintRef, modalPreviewCanvasRef, modalPreviewContextRef, preparePrintData, previewCanvasRef, previewContextRef, sourceCanvasForPrintRef, syncModalPreview]);
+  }, [imageDataForPrintRef, modalPreviewCanvasRef, modalPreviewContextRef, preparePrintData, previewCanvasRef, previewContextRef, rotationDegRef, sourceCanvasForPrintRef, syncModalPreview]);
 
   const renderImageFromDataUrl = useCallback(async (dataUrl) => {
     if (!dataUrl) {
@@ -519,4 +523,24 @@ function scaleImageDataToWidth(imageData, targetWidth) {
   );
 
   return scaledCtx.getImageData(0, 0, scaledCanvas.width, scaledCanvas.height);
+}
+
+function rotateCanvas(sourceCanvas, degrees) {
+  const angle = ((degrees % 360) + 360) % 360;
+  if (angle === 0) {
+    return sourceCanvas;
+  }
+  const radians = (angle * Math.PI) / 180;
+  const swap = angle === 90 || angle === 270;
+  const newWidth = swap ? sourceCanvas.height : sourceCanvas.width;
+  const newHeight = swap ? sourceCanvas.width : sourceCanvas.height;
+
+  const rotated = document.createElement('canvas');
+  rotated.width = newWidth;
+  rotated.height = newHeight;
+  const ctx = rotated.getContext('2d');
+  ctx.translate(newWidth / 2, newHeight / 2);
+  ctx.rotate(radians);
+  ctx.drawImage(sourceCanvas, -sourceCanvas.width / 2, -sourceCanvas.height / 2);
+  return rotated;
 }

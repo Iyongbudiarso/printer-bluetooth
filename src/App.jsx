@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
-import { AlertCircle, Bluetooth, CheckCircle2, Loader2, Printer } from 'lucide-react';
+import { AlertCircle, Bluetooth, CheckCircle2, Loader2, Printer, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -60,6 +60,7 @@ function App() {
   const [statusKey, setStatusKey] = useState('disconnected');
   const [deviceName, setDeviceName] = useState('No device detected.');
   const [printWidth, setPrintWidth] = useState('80');
+  const [rotationDeg, setRotationDeg] = useState(0);
   const [isProgressVisible, setProgressVisible] = useState(false);
   const [isPreviewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -70,6 +71,7 @@ function App() {
   const printDataCanvasRef = useRef(null);
   const printDataContextRef = useRef(null);
   const maxPrintWidthRef = useRef(WIDTH_TO_PIXELS[printWidth] || 384);
+  const rotationDegRef = useRef(0);
 
   const imageDataForPrintRef = useRef(null);
   const sourceCanvasForPrintRef = useRef(null);
@@ -136,6 +138,14 @@ function App() {
     lastToastIdRef.current = null;
   }, [dismiss]);
 
+  const handleRotate = useCallback(() => {
+    setRotationDeg((prev) => {
+      const next = (prev + 90) % 360;
+      rotationDegRef.current = next;
+      return next;
+    });
+  }, []);
+
   const {
     copyCanvasToPreview,
     renderImageFromDataUrl,
@@ -157,6 +167,7 @@ function App() {
     sourceCanvasForPrintRef,
     lastPdfBytesRef,
     lastImageDataUrlRef,
+    rotationDegRef,
     showToast,
     showProgress,
     hideProgress,
@@ -190,7 +201,7 @@ function App() {
       copyCanvasToPreview(sourceCanvasForPrintRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [printWidth]);
+  }, [printWidth, rotationDeg]);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -367,6 +378,10 @@ function App() {
                 <Button variant="outline" className="h-11 justify-center" onClick={showPreviewDialog}>
                   Preview Print
                 </Button>
+                <Button variant="outline" className="h-11 justify-center" onClick={handleRotate}>
+                  <RotateCw className="mr-2 h-4 w-4" />
+                  Rotate {rotationDeg ? `(${rotationDeg}°)` : ''}
+                </Button>
                 <Button variant="secondary" className="h-11 justify-center" onClick={handleDownloadPreview}>
                   Save as PNG
                 </Button>
@@ -439,9 +454,15 @@ function App() {
               />
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-              <Button variant="ghost" onClick={handleDownloadPreview}>
-                Save as PNG
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={handleDownloadPreview}>
+                  Save as PNG
+                </Button>
+                <Button variant="ghost" onClick={handleRotate}>
+                  <RotateCw className="mr-2 h-4 w-4" />
+                  Rotate {rotationDeg ? `(${rotationDeg}°)` : ''}
+                </Button>
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={closePreviewDialog}>
                   Close
